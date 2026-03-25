@@ -1,1 +1,6 @@
 # homework
+cd backend
+mvn spring-boot:run
+cd frontend
+npm install
+npm run dev:h5
