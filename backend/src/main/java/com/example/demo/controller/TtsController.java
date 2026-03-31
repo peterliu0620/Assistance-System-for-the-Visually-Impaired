@@ -26,7 +26,7 @@ public class TtsController {
 
     @PostMapping("/voice/tts")
     public TtsResponse synthesize(@RequestBody TtsRequest request, HttpServletRequest httpServletRequest) {
-        String audioId = qwenTtsService.synthesizeAndCache(request.getText());
+        String audioId = qwenTtsService.synthesizeAndCache(request.getText(), request.getVoice());
         String base = httpServletRequest.getScheme() + "://" + httpServletRequest.getServerName() + ":" + httpServletRequest.getServerPort();
         String audioUrl = base + "/api/voice/tts/audio/" + audioId;
         return new TtsResponse(audioId, audioUrl, qwenTtsService.getExpiresInSeconds());

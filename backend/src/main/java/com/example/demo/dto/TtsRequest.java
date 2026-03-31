@@ -6,4 +6,5 @@ import lombok.Data;
 public class TtsRequest {
 
     private String text;
+    private String voice;
 }

@@ -20,6 +20,7 @@ import java.net.URL;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -48,7 +49,7 @@ public class QwenTtsService {
     @Value("${vision.qwen.tts-format:mp3}")
     private String ttsFormat;
 
-    public String synthesizeAndCache(String text) {
+    public String synthesizeAndCache(String text, String customVoice) {
         if (text == null || text.isBlank()) {
             throw new IllegalArgumentException("播报文本不能为空。");
         }
@@ -63,7 +64,7 @@ public class QwenTtsService {
 
         Map<String, Object> body = new HashMap<>();
         body.put("model", ttsModel);
-        body.put("input", Map.of("text", text, "voice", ttsVoice));
+        body.put("input", Map.of("text", text, "voice", resolveVoice(customVoice)));
         body.put("parameters", Map.of("format", ttsFormat));
 
         String endpoint = normalizeBaseUrl(qwenBaseUrl) + "/api/v1/services/aigc/multimodal-generation/generation";
@@ -190,6 +191,18 @@ public class QwenTtsService {
             return baseUrl.substring(0, baseUrl.length() - 1);
         }
         return baseUrl;
+    }
+
+    private String resolveVoice(String customVoice) {
+        if (customVoice == null || customVoice.isBlank()) {
+            return ttsVoice;
+        }
+        String voice = customVoice.trim();
+        List<String> whitelist = List.of("Cherry", "Ethan", "Serena");
+        if (!whitelist.contains(voice)) {
+            return ttsVoice;
+        }
+        return voice;
     }
 
     @Getter
