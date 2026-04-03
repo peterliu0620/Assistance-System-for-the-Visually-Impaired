@@ -55,6 +55,7 @@
 			</view>
 
 			<button class="btn primary" @click="save">保存设置</button>
+			<button class="btn" @click="goKnowledge">打开知识库</button>
 			<button class="btn" @click="backToHome">返回识别页</button>
 		</view>
 	</view>
@@ -162,6 +163,11 @@
 			save() {
 				this.form = saveUserSettings(this.form)
 				uni.showToast({ title: '设置已保存', icon: 'success' })
+			},
+			goKnowledge() {
+				uni.navigateTo({
+					url: '/pages/knowledge/knowledge'
+				})
 			},
 			backToHome() {
 				uni.navigateBack({

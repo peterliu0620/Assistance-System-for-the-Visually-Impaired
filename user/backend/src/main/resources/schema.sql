@@ -11,10 +11,6 @@ CREATE TABLE IF NOT EXISTS `user` (
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS uk_username ON `user`(username);
-CREATE UNIQUE INDEX IF NOT EXISTS uk_phone ON `user`(phone);
-CREATE UNIQUE INDEX IF NOT EXISTS uk_email ON `user`(email);
-
 CREATE TABLE IF NOT EXISTS scan_record (
   id BIGINT PRIMARY KEY AUTO_INCREMENT,
   user_id BIGINT NOT NULL,
@@ -40,3 +36,10 @@ CREATE TABLE IF NOT EXISTS scan_item (
   attributes_json TEXT,
   is_primary TINYINT NOT NULL DEFAULT 0
 );
+
+CREATE UNIQUE INDEX IF NOT EXISTS uk_username ON `user`(username);
+CREATE UNIQUE INDEX IF NOT EXISTS uk_phone ON `user`(phone);
+CREATE UNIQUE INDEX IF NOT EXISTS uk_email ON `user`(email);
+CREATE INDEX IF NOT EXISTS idx_scan_record_user_time ON scan_record(user_id, captured_at);
+CREATE INDEX IF NOT EXISTS idx_scan_record_session ON scan_record(session_id);
+CREATE INDEX IF NOT EXISTS idx_scan_item_record ON scan_item(record_id);

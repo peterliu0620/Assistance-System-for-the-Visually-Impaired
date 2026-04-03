@@ -23,15 +23,24 @@ public class VisionController {
 
     @PostMapping(value = "/vision/analyze", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public VisionAnalyzeResponse analyze(@RequestPart("image") MultipartFile image,
-                                         @RequestParam(value = "command", required = false) String command) {
-        return visionAnalyzeService.analyze(image, command);
+                                         @RequestParam(value = "command", required = false) String command,
+                                         @RequestParam(value = "userId", required = false) Long userId,
+                                         @RequestParam(value = "sessionId", required = false) String sessionId,
+                                         @RequestParam(value = "latitude", required = false) Double latitude,
+                                         @RequestParam(value = "longitude", required = false) Double longitude,
+                                         @RequestParam(value = "locationText", required = false) String locationText) {
+        return visionAnalyzeService.analyze(image, command, userId, sessionId, latitude, longitude, locationText);
     }
 
     @PostMapping(value = "/vision/find-target", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public TargetTrackResponse findTarget(@RequestPart("image") MultipartFile image,
                                           @RequestParam("targetName") String targetName,
                                           @RequestParam("sessionId") String sessionId,
-                                          @RequestParam("frameIndex") Integer frameIndex) {
-        return visionAnalyzeService.findTarget(image, targetName, sessionId, frameIndex);
+                                          @RequestParam("frameIndex") Integer frameIndex,
+                                          @RequestParam(value = "userId", required = false) Long userId,
+                                          @RequestParam(value = "latitude", required = false) Double latitude,
+                                          @RequestParam(value = "longitude", required = false) Double longitude,
+                                          @RequestParam(value = "locationText", required = false) String locationText) {
+        return visionAnalyzeService.findTarget(image, targetName, sessionId, frameIndex, userId, latitude, longitude, locationText);
     }
 }

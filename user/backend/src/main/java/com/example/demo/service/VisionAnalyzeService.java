@@ -27,6 +27,7 @@ import java.util.Locale;
 public class VisionAnalyzeService {
 
     private final ObjectMapper objectMapper = new ObjectMapper();
+    private final KnowledgeService knowledgeService;
 
     @Value("${vision.qwen.base-url:https://dashscope.aliyuncs.com}")
     private String qwenBaseUrl;
@@ -37,7 +38,12 @@ public class VisionAnalyzeService {
     @Value("${vision.qwen.vl-model:qwen-vl-plus-latest}")
     private String vlModel;
 
-    public VisionAnalyzeResponse analyze(MultipartFile image, String command) {
+    public VisionAnalyzeService(KnowledgeService knowledgeService) {
+        this.knowledgeService = knowledgeService;
+    }
+
+    public VisionAnalyzeResponse analyze(MultipartFile image, String command, Long userId, String sessionId,
+                                         Double latitude, Double longitude, String locationText) {
         if (image == null || image.isEmpty()) {
             throw new IllegalArgumentException("图片不能为空，请重新拍照后再试。");
         }
@@ -58,7 +64,7 @@ public class VisionAnalyzeService {
             }
             String narration = resultNode.path("narration").asText(buildNarration(scene, items));
 
-            return new VisionAnalyzeResponse(
+            VisionAnalyzeResponse response = new VisionAnalyzeResponse(
                     normalizedCommand,
                     LocalDateTime.now(),
                     scene,
@@ -66,12 +72,15 @@ public class VisionAnalyzeService {
                     items,
                     narration
             );
+            knowledgeService.archiveAnalyze(userId, sessionId, response, latitude, longitude, locationText);
+            return response;
         } catch (Exception ex) {
             throw new IllegalStateException("视觉识别失败: " + ex.getMessage());
         }
     }
 
-    public TargetTrackResponse findTarget(MultipartFile image, String targetName, String sessionId, Integer frameIndex) {
+    public TargetTrackResponse findTarget(MultipartFile image, String targetName, String sessionId, Integer frameIndex,
+                                          Long userId, Double latitude, Double longitude, String locationText) {
         if (image == null || image.isEmpty()) {
             throw new IllegalArgumentException("图片不能为空，请重新拍照后再试。");
         }
@@ -94,7 +103,9 @@ public class VisionAnalyzeService {
             String base64Image = Base64.getEncoder().encodeToString(image.getBytes());
             String mimeType = image.getContentType() == null || image.getContentType().isBlank() ? "image/jpeg" : image.getContentType();
             JsonNode resultNode = requestTargetTrackResult(base64Image, mimeType, normalizedTarget, normalizedSessionId, frameIndex);
-            return buildTrackResponse(resultNode, normalizedTarget, normalizedSessionId, frameIndex);
+            TargetTrackResponse response = buildTrackResponse(resultNode, normalizedTarget, normalizedSessionId, frameIndex);
+            knowledgeService.archiveTrackingResult(userId, normalizedSessionId, normalizedTarget, response, latitude, longitude, locationText);
+            return response;
         } catch (Exception ex) {
             throw new IllegalStateException("目标追踪失败: " + ex.getMessage());
         }

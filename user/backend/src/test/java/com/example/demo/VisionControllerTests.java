@@ -1,6 +1,7 @@
 package com.example.demo;
 
 import com.example.demo.dto.TargetTrackResponse;
+import com.example.demo.controller.VisionController;
 import com.example.demo.service.VisionAnalyzeService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -13,13 +14,14 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.LocalDateTime;
 
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@WebMvcTest
+@WebMvcTest(VisionController.class)
 @Import(com.example.demo.controller.ApiExceptionHandler.class)
 class VisionControllerTests {
 
@@ -38,7 +40,7 @@ class VisionControllerTests {
                 "demo".getBytes()
         );
 
-        when(visionAnalyzeService.findTarget(eq(image), eq("杯子"), eq("session-001"), eq(2)))
+        when(visionAnalyzeService.findTarget(any(), eq("杯子"), eq("session-001"), eq(2), eq(null), eq(null), eq(null), eq(null)))
                 .thenReturn(new TargetTrackResponse(
                         "session-001",
                         "杯子",

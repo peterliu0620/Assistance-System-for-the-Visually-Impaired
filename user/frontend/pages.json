@@ -17,6 +17,12 @@
 			"style": {
 				"navigationBarTitleText": "用户中心"
 			}
+		},
+		{
+			"path": "pages/knowledge/knowledge",
+			"style": {
+				"navigationBarTitleText": "智能知识库"
+			}
 		}
 	],
 	"globalStyle": {
