@@ -78,6 +78,31 @@ class AppUserAdminControllerTests {
                 .andExpect(jsonPath("$.data").value(true));
     }
 
+    @Test
+    void shouldAcceptPhoneAndEmailWithSurroundingWhitespace() throws Exception {
+        String token = loginAndExtractToken();
+
+        String createBody = """
+                {
+                  "username": "appuser02",
+                  "password": "123456",
+                  "nickname": "测试用户2",
+                  "phone": " 18364501214 ",
+                  "email": " qaz252385@163.com ",
+                  "status": 1
+                }
+                """;
+
+        mockMvc.perform(post("/api/admin/app-users")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(createBody))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.phone").value("18364501214"))
+                .andExpect(jsonPath("$.data.email").value("qaz252385@163.com"));
+    }
+
     private String loginAndExtractToken() throws Exception {
         String response = mockMvc.perform(post("/api/admin/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)

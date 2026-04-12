@@ -1,29 +1,102 @@
 <template>
 	<view :class="['page', themeClass, largeFontClass]">
-		<view class="card hero-card">
-			<text class="title">视障智能视觉辅助</text>
-			<text class="desc">保留单次识别能力，并新增“实时导盲寻物”模式，帮助用户持续寻找钥匙、杯子、药盒等常见物品。</text>
+		<view class="page-glow glow-one"></view>
+		<view class="page-glow glow-two"></view>
+		<view class="page-grid"></view>
 
-			<view class="mode-strip">
-				<view class="mode-chip mode-chip-active">当前模式：{{ modeLabel }}</view>
-				<view class="mode-chip">语音 + 震动反馈</view>
-				<view class="mode-chip">连续抽帧追踪</view>
+		<view class="hero-shell">
+			<view class="hero-copy">
+				<view class="hero-topline">
+					<text class="eyebrow">Vision Guide</text>
+					<view :class="['hero-status-pill', findModeState.isTracking ? 'hero-status-pill-live' : '']">
+						{{ findModeState.isTracking ? '实时寻物已启动' : '辅助识别待命中' }}
+					</view>
+				</view>
+				<text class="hero-title">把识别、寻物和安全提醒放进一个更清晰的入口</text>
+				<text class="hero-desc">首页优先呈现当前状态、关键反馈和主操作，让视障用户在最短路径里完成识别与导盲寻物。</text>
+
+				<view class="hero-pills">
+					<view class="hero-pill hero-pill-active">当前模式：{{ modeLabel }}</view>
+					<view class="hero-pill">语音 + 震动反馈</view>
+					<view class="hero-pill">连续抽帧追踪</view>
+				</view>
+
+				<view class="hero-actions">
+					<button class="action-btn primary hero-primary-btn" @click="startFindMode" :disabled="findModeState.isTracking || loading">
+						{{ findModeState.isTracking ? '寻物进行中' : '开始寻物' }}
+					</button>
+					<button class="action-btn ghost hero-secondary-btn" @click="startVoiceTrigger" :disabled="loading || findModeState.isTracking">
+						{{ loading ? '识别中' : '语音识别' }}
+					</button>
+				</view>
+
+				<view class="hero-utility-links">
+					<view class="hero-link" @click="goKnowledge">进入知识库</view>
+					<view class="hero-link" @click="goUserCenter">打开用户中心</view>
+				</view>
 			</view>
 
-			<view class="gesture-zone" @tap="onGestureTap" @longpress="onGestureLongPress">
-				<text class="gesture-title">手势操作区</text>
-				<text class="gesture-text">单击：{{ gestureActionLabel(settings.gestureSingleTap) }}</text>
-				<text class="gesture-text">双击：{{ gestureActionLabel(settings.gestureDoubleTap) }}</text>
-				<text class="gesture-text">长按：{{ gestureActionLabel(settings.gestureLongPress) }}</text>
+			<view class="hero-aside">
+				<view class="hero-focus-panel">
+					<text class="panel-kicker">实时状态</text>
+					<text class="focus-target">{{ findModeState.targetName || '等待输入目标物' }}</text>
+					<text class="focus-meta">{{ findModeState.guidanceText || '点击开始寻物后，系统会先收集目标物名称并进入引导。' }}</text>
+				</view>
+
+				<view class="hero-stats">
+					<view class="hero-stat">
+						<text class="hero-stat-label">当前状态</text>
+						<text class="hero-stat-value">{{ trackingStatusText }}</text>
+					</view>
+					<view class="hero-stat">
+						<text class="hero-stat-label">接近程度</text>
+						<text class="hero-stat-value">{{ proximityText }}</text>
+					</view>
+					<view class="hero-stat">
+						<text class="hero-stat-label">最近会话</text>
+						<text class="hero-stat-value hero-stat-value-small">{{ knowledgeState.lastSessionId || '尚未生成' }}</text>
+					</view>
+					<view class="hero-stat">
+						<text class="hero-stat-label">反馈方式</text>
+						<text class="hero-stat-value">语音 + 震动</text>
+					</view>
+				</view>
 			</view>
 		</view>
 
-		<view class="card tracking-card">
+		<view class="section-panel gesture-panel" @tap="onGestureTap" @longpress="onGestureLongPress">
 			<view class="section-head">
-				<text class="section-title">AI 实时导盲寻物</text>
-				<text class="section-tag">{{ findModeState.isTracking ? '追踪中' : '待启动' }}</text>
+				<view>
+					<text class="section-kicker">辅助交互</text>
+					<text class="section-title">无障碍手势操作</text>
+				</view>
+				<text class="section-tag">点击区域即可触发</text>
 			</view>
-			<text class="section-desc">先说出要找的目标物，系统会持续分析镜头画面，并给出方向级语音和震动引导。</text>
+			<view class="gesture-grid">
+				<view class="gesture-item">
+					<text class="gesture-item-label">单击</text>
+					<text class="gesture-item-value">{{ gestureActionLabel(settings.gestureSingleTap) }}</text>
+				</view>
+				<view class="gesture-item">
+					<text class="gesture-item-label">双击</text>
+					<text class="gesture-item-value">{{ gestureActionLabel(settings.gestureDoubleTap) }}</text>
+				</view>
+				<view class="gesture-item">
+					<text class="gesture-item-label">长按</text>
+					<text class="gesture-item-value">{{ gestureActionLabel(settings.gestureLongPress) }}</text>
+				</view>
+			</view>
+		</view>
+
+		<view class="section-panel tracking-panel">
+			<view class="section-head">
+				<view>
+					<text class="section-kicker">核心工作区</text>
+					<text class="section-title">AI 实时导盲寻物</text>
+				</view>
+				<text :class="['section-tag', findModeState.isTracking ? 'section-tag-live' : '']">{{ findModeState.isTracking ? '追踪中' : '待启动' }}</text>
+			</view>
+			<text class="section-desc">说出目标物后，系统会持续分析镜头、更新方位，并通过语音与震动给出接近提示。</text>
 
 			<view class="tracking-summary-grid">
 				<view class="summary-block strong">
@@ -45,9 +118,14 @@
 			</view>
 
 			<view class="guidance-panel">
-				<text class="guidance-kicker">实时引导</text>
-				<text class="guidance-text">{{ findModeState.guidanceText || '点击“开始寻物”后，系统会先收集目标物名称。' }}</text>
-				<text class="guidance-meta">会话：{{ findModeState.sessionId || '-' }} | 命中 {{ findModeState.hitCount }} 次 | 丢失 {{ findModeState.missCount }} 次</text>
+				<text class="panel-kicker">实时引导</text>
+				<text class="guidance-text">{{ findModeState.guidanceText || '开始寻物后，系统会先收集目标物名称，再持续播报方向和距离变化。' }}</text>
+				<text class="guidance-meta">会话 {{ findModeState.sessionId || '-' }} · 命中 {{ findModeState.hitCount }} 次 · 丢失 {{ findModeState.missCount }} 次</text>
+				<view class="guidance-chip-row">
+					<view class="guidance-chip">{{ findModeState.detected ? '已发现目标' : '正在搜索' }}</view>
+					<view class="guidance-chip">{{ findModeState.locked ? '目标已锁定' : '等待锁定' }}</view>
+					<view class="guidance-chip">{{ proximityText }}</view>
+				</view>
 			</view>
 
 			<view v-if="findModeState.awaitingManualInput" class="manual-input-panel">
@@ -67,7 +145,7 @@
 			<view v-if="showTrackingCamera" class="camera-wrap">
 				<camera class="tracking-camera" device-position="back" flash="off"></camera>
 				<view class="camera-overlay">
-					<text class="camera-caption">将镜头对准可能出现目标物的区域，系统会每隔约 1.2 秒自动分析一次。</text>
+					<text class="camera-caption">将镜头对准可能出现目标物的区域，系统约每 1.2 秒自动分析一次。</text>
 				</view>
 			</view>
 
@@ -75,48 +153,87 @@
 				<button class="action-btn primary" @click="startFindMode" :disabled="findModeState.isTracking || loading">
 					{{ findModeState.isTracking ? '寻物进行中' : '开始寻物' }}
 				</button>
-				<button class="action-btn" @click="stopFindMode('idle', '已退出寻物模式')" :disabled="!findModeState.targetName && !findModeState.isTracking && !findModeState.awaitingManualInput">
+				<button class="action-btn ghost" @click="stopFindMode('idle', '已退出寻物模式')" :disabled="!findModeState.targetName && !findModeState.isTracking && !findModeState.awaitingManualInput">
 					停止寻物
 				</button>
 			</view>
 		</view>
 
-		<view class="card">
+		<view class="section-panel tools-panel">
 			<view class="section-head">
-				<text class="section-title">单次拍照识别</text>
+				<view>
+					<text class="section-kicker">快捷入口</text>
+					<text class="section-title">单次拍照识别与扩展功能</text>
+				</view>
 				<text class="section-tag">保留原功能</text>
 			</view>
-			<text class="section-desc">说出“这是什么？”，系统拍照分析当前画面，并按“场景 > 方位 > 核心物品”进行播报。</text>
+			<text class="section-desc">当你只想快速判断当前画面，也可以直接触发一次识别，随后继续进入知识库或用户中心。</text>
 
-			<view class="bottom-actions bottom-actions-inline">
+			<view class="utility-actions">
 				<button class="action-btn primary" @click="startVoiceTrigger" :disabled="loading || findModeState.isTracking">
 					{{ loading ? '识别中' : '语音识别' }}
 				</button>
-				<button class="action-btn" @click="scanByDefaultCommand" :disabled="loading || findModeState.isTracking">直接拍照</button>
-				<button class="action-btn" @click="goKnowledge">知识库</button>
-				<button class="action-btn" @click="goUserCenter">用户中心</button>
+				<button class="action-btn ghost" @click="scanByDefaultCommand" :disabled="loading || findModeState.isTracking">直接拍照</button>
+				<button class="action-btn subtle" @click="goKnowledge">知识库</button>
+				<button class="action-btn subtle" @click="goUserCenter">用户中心</button>
 			</view>
 		</view>
 
-		<view class="card" v-if="result">
-			<text class="result-title">结构化播报结果</text>
-			<text class="line">触发指令：{{ result.triggerCommand }}</text>
-			<text class="line">场景：{{ result.scene }}</text>
-			<text class="line">说明：{{ result.positionSummary }}</text>
+		<view class="section-panel result-panel" v-if="result">
+			<view class="section-head">
+				<view>
+					<text class="section-kicker">识别归档</text>
+					<text class="section-title">结构化播报结果</text>
+				</view>
+				<text class="section-tag">最新识别</text>
+			</view>
+			<view class="result-highlight">
+				<text class="result-highlight-label">核心识别</text>
+				<text class="result-highlight-value">{{ (result.items && result.items.length && result.items[0].name) || result.scene || '暂无结果' }}</text>
+				<text class="result-highlight-meta">{{ result.positionSummary || '已完成本轮播报与归档。' }}</text>
+			</view>
+			<view class="result-grid">
+				<view class="result-mini-card">
+					<text class="result-mini-label">触发指令</text>
+					<text class="result-mini-value">{{ result.triggerCommand }}</text>
+				</view>
+				<view class="result-mini-card">
+					<text class="result-mini-label">识别场景</text>
+					<text class="result-mini-value">{{ result.scene }}</text>
+				</view>
+			</view>
 			<text class="line">播报：{{ result.narration }}</text>
+			<view class="result-items" v-if="result.items && result.items.length">
+				<view class="result-item-chip" v-for="(item, idx) in result.items" :key="`${item.name}-${idx}`">
+					<text class="result-item-name">{{ item.name }}</text>
+					<text class="result-item-meta">{{ item.position || '未知方位' }} / {{ item.confidence || 0 }}%</text>
+				</view>
+			</view>
+			<view class="medicine-spotlight" v-if="result.matchedMedicineProfileSummary">
+				<text class="medicine-spotlight-kicker">药品档案命中</text>
+				<text class="medicine-spotlight-name">{{ result.matchedMedicineProfileSummary.medicineName }}</text>
+				<text class="line" v-if="result.matchedMedicineProfileSummary.dosageUsage">用法用量：{{ result.matchedMedicineProfileSummary.dosageUsage }}</text>
+				<text class="line" v-if="result.matchedMedicineProfileSummary.contraindications">禁忌：{{ result.matchedMedicineProfileSummary.contraindications }}</text>
+			</view>
+			<text class="line warn-line" v-if="result.medicineAlert && result.medicineAlert.triggered">安全预警：{{ result.medicineAlert.alertMessage }}</text>
 		</view>
 
-		<view class="card debug">
-			<view class="debug-head">
-				<text class="debug-title">调试信息</text>
+		<view class="section-panel debug-panel">
+			<view class="section-head debug-head">
+				<view>
+					<text class="section-kicker">运行状态</text>
+					<text class="section-title">调试信息</text>
+				</view>
 				<button class="tiny" @click="clearDebugLogs">清空</button>
 			</view>
-			<text class="debug-line">API: {{ apiBase }}</text>
-			<text class="debug-line">状态: {{ debug.status }}</text>
-			<text class="debug-line">最后指令: {{ debug.lastCommand || '-' }}</text>
-			<text class="debug-line">最后图片: {{ debug.lastImagePath || '-' }}</text>
-			<text class="debug-line">最后响应码: {{ debug.lastStatusCode || '-' }}</text>
-			<text class="debug-line">最后错误: {{ debug.lastError || '-' }}</text>
+			<view class="debug-grid">
+				<text class="debug-line">API: {{ apiBase }}</text>
+				<text class="debug-line">状态: {{ debug.status }}</text>
+				<text class="debug-line">最后指令: {{ debug.lastCommand || '-' }}</text>
+				<text class="debug-line">最后图片: {{ debug.lastImagePath || '-' }}</text>
+				<text class="debug-line">最后响应码: {{ debug.lastStatusCode || '-' }}</text>
+				<text class="debug-line">最后错误: {{ debug.lastError || '-' }}</text>
+			</view>
 			<text class="debug-log" v-for="(log, idx) in debug.logs" :key="idx">{{ log }}</text>
 		</view>
 	</view>
@@ -350,6 +467,11 @@
 					return
 				}
 				uni.vibrateShort()
+			},
+			triggerStrongWarningHaptic() {
+				uni.vibrateLong()
+				setTimeout(() => uni.vibrateLong(), 500)
+				setTimeout(() => uni.vibrateLong(), 1100)
 			},
 			pushDebugLog(message) {
 				const now = new Date()
@@ -839,7 +961,12 @@
 						this.pushDebugLog('返回解析成功，准备语音播报')
 						uni.showToast({ title: '已自动录入个人知识库', icon: 'none' })
 						try {
-							this.speak(this.pickNarrationText(data))
+							const speakText = this.pickNarrationText(data)
+							if (data.medicineAlert && data.medicineAlert.triggered) {
+								this.triggerStrongWarningHaptic()
+								uni.showToast({ title: '检测到药品风险，请暂停服用', icon: 'none', duration: 2500 })
+							}
+							this.speak(speakText)
 						} catch (e) {
 							this.debug.status = 'speak-failed'
 							this.setDebugError(`语音播报失败: ${e && e.message ? e.message : 'unknown'}`)
@@ -857,12 +984,41 @@
 				if (!data) {
 					return '识别完成'
 				}
+				const medicineText = this.buildMedicineNarration(data)
+				if (medicineText) {
+					return medicineText
+				}
 				if (this.settings.broadcastGranularity === 'concise') {
 					const firstItem = data.items && data.items.length ? data.items[0].name : '物体'
 					const scene = data.scene || '当前场景'
 					return `场景：${scene}。核心物品：${firstItem}。`
 				}
 				return data.narration || '识别完成'
+			},
+			buildMedicineNarration(data) {
+				const summary = data && data.matchedMedicineProfileSummary
+				if (!summary) {
+					return ''
+				}
+				const parts = [`已识别到药品：${summary.medicineName}。`]
+				if (summary.dosageUsage) {
+					parts.push(`用法用量：${summary.dosageUsage}。`)
+				}
+				if (summary.suitablePeople) {
+					parts.push(`适用人群：${summary.suitablePeople}。`)
+				}
+				if (summary.contraindications) {
+					parts.push(`禁忌提醒：${summary.contraindications}。`)
+				}
+				if (summary.expiryDate) {
+					const expired = new Date(summary.expiryDate).getTime() < Date.now() - 24 * 60 * 60 * 1000
+					parts.push(expired ? '当前档案显示该药品已过期。' : `有效期至：${summary.expiryDate}。`)
+				}
+				if (data.medicineAlert && data.medicineAlert.triggered && data.medicineAlert.alertMessage) {
+					parts.unshift(`${data.medicineAlert.alertMessage}。`)
+					parts.push('请暂停服用，并联系家属确认。')
+				}
+				return parts.join('')
 			},
 			speak(text) {
 				if (!text) {
@@ -972,6 +1128,31 @@
 	.page {
 		min-height: 100vh;
 		padding: 28rpx 28rpx 48rpx;
+		position: relative;
+	}
+
+	.page-glow {
+		position: absolute;
+		border-radius: 999rpx;
+		filter: blur(22rpx);
+		opacity: 0.34;
+		pointer-events: none;
+	}
+
+	.glow-one {
+		width: 320rpx;
+		height: 320rpx;
+		top: 40rpx;
+		right: -80rpx;
+		background: radial-gradient(circle, rgba(255, 207, 75, 0.75) 0%, rgba(255, 207, 75, 0) 72%);
+	}
+
+	.glow-two {
+		width: 360rpx;
+		height: 360rpx;
+		top: 520rpx;
+		left: -120rpx;
+		background: radial-gradient(circle, rgba(110, 215, 255, 0.52) 0%, rgba(110, 215, 255, 0) 72%);
 	}
 
 	.theme-gold {
@@ -990,6 +1171,36 @@
 		backdrop-filter: blur(10rpx);
 		box-shadow: var(--shadow-lg);
 		margin-bottom: 22rpx;
+		position: relative;
+		z-index: 1;
+	}
+
+	.hero-card {
+		padding: 32rpx;
+		overflow: hidden;
+	}
+
+	.hero-topline {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 16rpx;
+		margin-bottom: 12rpx;
+	}
+
+	.eyebrow {
+		font-size: 22rpx;
+		text-transform: uppercase;
+		letter-spacing: 6rpx;
+		color: rgba(255, 245, 214, 0.74);
+	}
+
+	.hero-status-pill {
+		padding: 10rpx 20rpx;
+		border-radius: 999rpx;
+		background: rgba(255, 255, 255, 0.1);
+		color: #f9f3d4;
+		font-size: 22rpx;
 	}
 
 	.theme-gold .card {
@@ -1019,6 +1230,52 @@
 		line-height: 1.7;
 	}
 
+	.hero-grid {
+		display: grid;
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+		gap: 16rpx;
+		margin-top: 22rpx;
+	}
+
+	.hero-panel {
+		padding: 22rpx;
+		border-radius: 20rpx;
+		background: rgba(255, 255, 255, 0.05);
+		border: 2rpx solid rgba(129, 173, 219, 0.18);
+	}
+
+	.hero-panel-strong {
+		background: linear-gradient(145deg, rgba(255, 207, 75, 0.18), rgba(114, 221, 255, 0.12));
+		border-color: rgba(255, 207, 75, 0.32);
+	}
+
+	.hero-panel-label {
+		display: block;
+		font-size: 22rpx;
+		color: #9bb4cd;
+	}
+
+	.hero-panel-value {
+		display: block;
+		margin-top: 12rpx;
+		font-size: 34rpx;
+		line-height: 1.35;
+		color: #f6fbff;
+		font-weight: bold;
+	}
+
+	.hero-panel-value-small {
+		font-size: 28rpx;
+	}
+
+	.hero-panel-meta {
+		display: block;
+		margin-top: 10rpx;
+		font-size: 22rpx;
+		line-height: 1.6;
+		color: #b8cce1;
+	}
+
 	.mode-strip {
 		display: flex;
 		flex-wrap: wrap;
@@ -1046,6 +1303,22 @@
 		border: 2rpx dashed rgba(109, 159, 226, 0.46);
 		border-radius: 16rpx;
 		background: rgba(255, 255, 255, 0.04);
+	}
+
+	.gesture-head {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 12rpx;
+		margin-bottom: 6rpx;
+	}
+
+	.gesture-badge {
+		font-size: 20rpx;
+		color: #f8d978;
+		background: rgba(255, 207, 75, 0.1);
+		border-radius: 999rpx;
+		padding: 8rpx 14rpx;
 	}
 
 	.gesture-title,
@@ -1079,6 +1352,11 @@
 		background: rgba(99, 181, 255, 0.14);
 		color: #9fddff;
 		font-size: 22rpx;
+	}
+
+	.section-tag-live {
+		background: rgba(255, 207, 75, 0.18);
+		color: #ffe291;
 	}
 
 	.tracking-summary-grid {
@@ -1121,6 +1399,21 @@
 		border-radius: 18rpx;
 		background: rgba(5, 12, 20, 0.76);
 		border: 2rpx solid rgba(103, 198, 255, 0.2);
+	}
+
+	.guidance-chip-row {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 10rpx;
+		margin-top: 14rpx;
+	}
+
+	.guidance-chip {
+		padding: 10rpx 16rpx;
+		border-radius: 999rpx;
+		background: rgba(255, 255, 255, 0.06);
+		color: #d9eefb;
+		font-size: 22rpx;
 	}
 
 	.guidance-kicker {
@@ -1182,6 +1475,7 @@
 		display: flex;
 		gap: 12rpx;
 		margin-top: 16rpx;
+		flex-wrap: wrap;
 	}
 
 	.mini-btn,
@@ -1202,6 +1496,11 @@
 		background: linear-gradient(135deg, #62d0ff, #3caef5);
 		color: #081a2c;
 		font-weight: bold;
+		box-shadow: 0 14rpx 28rpx rgba(60, 174, 245, 0.24);
+	}
+
+	.action-card {
+		background-image: linear-gradient(160deg, rgba(18, 27, 43, 0.9), rgba(8, 15, 24, 0.88)), radial-gradient(circle at right top, rgba(255, 207, 75, 0.12), transparent 40%);
 	}
 
 	.camera-wrap {
@@ -1240,12 +1539,132 @@
 		margin-bottom: 10rpx;
 	}
 
+	.result-card {
+		border-color: rgba(110, 226, 187, 0.24) !important;
+	}
+
+	.result-highlight {
+		padding: 22rpx;
+		border-radius: 20rpx;
+		background: linear-gradient(145deg, rgba(70, 207, 171, 0.14), rgba(126, 215, 255, 0.08));
+		border: 2rpx solid rgba(113, 215, 184, 0.18);
+		margin-bottom: 16rpx;
+	}
+
+	.result-highlight-label {
+		display: block;
+		font-size: 22rpx;
+		color: #9fd8c8;
+	}
+
+	.result-highlight-value {
+		display: block;
+		margin-top: 10rpx;
+		font-size: 40rpx;
+		font-weight: bold;
+		color: #f6fbff;
+	}
+
+	.result-highlight-meta {
+		display: block;
+		margin-top: 8rpx;
+		font-size: 22rpx;
+		line-height: 1.6;
+		color: #b6d7ea;
+	}
+
+	.result-grid {
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		gap: 14rpx;
+		margin-bottom: 14rpx;
+	}
+
+	.result-mini-card {
+		padding: 18rpx;
+		border-radius: 16rpx;
+		background: rgba(255, 255, 255, 0.04);
+		border: 1px solid rgba(113, 157, 194, 0.2);
+	}
+
+	.result-mini-label {
+		display: block;
+		font-size: 22rpx;
+		color: #9bb4cd;
+	}
+
+	.result-mini-value {
+		display: block;
+		margin-top: 8rpx;
+		font-size: 28rpx;
+		line-height: 1.45;
+		color: #f4f8ff;
+		font-weight: bold;
+	}
+
+	.result-items {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 12rpx;
+		margin-top: 14rpx;
+	}
+
+	.result-item-chip {
+		min-width: 200rpx;
+		padding: 16rpx 18rpx;
+		border-radius: 16rpx;
+		background: rgba(255, 255, 255, 0.05);
+		border: 1px solid rgba(121, 164, 205, 0.18);
+	}
+
+	.result-item-name {
+		display: block;
+		color: #f3f8ff;
+		font-size: 26rpx;
+		font-weight: bold;
+	}
+
+	.result-item-meta {
+		display: block;
+		margin-top: 6rpx;
+		color: #a7bfd7;
+		font-size: 22rpx;
+	}
+
+	.medicine-spotlight {
+		margin-top: 16rpx;
+		padding: 20rpx;
+		border-radius: 18rpx;
+		background: linear-gradient(145deg, rgba(255, 170, 102, 0.14), rgba(255, 225, 149, 0.08));
+		border: 2rpx solid rgba(255, 194, 92, 0.2);
+	}
+
+	.medicine-spotlight-kicker {
+		display: block;
+		font-size: 22rpx;
+		color: #ffd976;
+		letter-spacing: 2rpx;
+	}
+
+	.medicine-spotlight-name {
+		display: block;
+		margin-top: 10rpx;
+		font-size: 34rpx;
+		font-weight: bold;
+		color: #fff5df;
+	}
+
 	.line {
 		display: block;
 		font-size: 26rpx;
 		color: #d7e5f7;
 		line-height: 1.6;
 		margin-bottom: 8rpx;
+	}
+
+	.warn-line {
+		color: #ffb0a6;
+		font-weight: bold;
 	}
 
 	.debug {
@@ -1300,8 +1719,455 @@
 	.font-large .debug-line,
 	.font-large .debug-log,
 	.font-large .gesture-text,
-	.font-large .guidance-text,
-	.font-large .summary-value {
+		.font-large .guidance-text,
+	.font-large .summary-value,
+	.font-large .hero-panel-value,
+	.font-large .result-highlight-value {
 		font-size: 32rpx;
+	}
+
+	@media screen and (max-width: 720px) {
+		.hero-grid,
+		.result-grid,
+		.tracking-summary-grid {
+			grid-template-columns: 1fr;
+		}
+
+		.hero-topline,
+		.gesture-head {
+			flex-wrap: wrap;
+		}
+
+		.action-btn,
+		.mini-btn {
+			min-width: 220rpx;
+		}
+	}
+</style>
+<style>
+	@import '../../styles/experience-shell.css';
+
+	.glow-one {
+		width: 380rpx;
+		height: 380rpx;
+		right: -110rpx;
+	}
+
+	.glow-two {
+		width: 420rpx;
+		height: 420rpx;
+		top: 540rpx;
+		left: -150rpx;
+	}
+
+	.hero-shell {
+		grid-template-columns: minmax(0, 1.2fr) minmax(280rpx, 0.88fr);
+		align-items: end;
+	}
+
+	.hero-shell::before {
+		content: '';
+		position: absolute;
+		top: -160rpx;
+		right: -80rpx;
+		width: 420rpx;
+		height: 420rpx;
+		border-radius: 50%;
+		background: radial-gradient(circle, rgba(255, 212, 107, 0.22), rgba(255, 212, 107, 0));
+	}
+
+	.hero-shell::after {
+		content: '';
+		position: absolute;
+		left: 34rpx;
+		right: 34rpx;
+		bottom: 0;
+		height: 2rpx;
+		background: linear-gradient(90deg, rgba(255, 255, 255, 0), var(--line-soft), rgba(255, 255, 255, 0));
+	}
+
+	.hero-topline,
+	.manual-actions,
+	.tracking-actions {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 14rpx;
+	}
+
+	.hero-status-pill {
+		padding: 10rpx 18rpx;
+		border-radius: 999rpx;
+		font-size: 22rpx;
+		color: var(--text-main);
+		background: rgba(255, 255, 255, 0.06);
+		border: 1px solid rgba(255, 255, 255, 0.08);
+	}
+
+	.hero-status-pill-live,
+	.section-tag-live {
+		background: rgba(255, 212, 107, 0.14);
+		color: var(--accent-strong);
+		border-color: rgba(255, 212, 107, 0.2);
+	}
+
+	.hero-desc,
+	.focus-meta,
+	.guidance-text,
+	.line {
+		display: block;
+		font-size: 28rpx;
+		line-height: 1.7;
+		color: var(--text-soft);
+	}
+
+	.hero-pills,
+	.guidance-chip-row {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 12rpx;
+	}
+
+	.hero-pills {
+		margin-top: 22rpx;
+	}
+
+	.hero-pill,
+	.guidance-chip {
+		padding: 10rpx 18rpx;
+		border-radius: 999rpx;
+		font-size: 22rpx;
+		color: var(--text-main);
+		background: rgba(255, 255, 255, 0.05);
+		border: 1px solid rgba(255, 255, 255, 0.08);
+	}
+
+	.hero-pill-active {
+		background: linear-gradient(135deg, #ffd46b, #fff0bc);
+		color: #13202f;
+		border-color: transparent;
+	}
+
+	.hero-utility-links {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 12rpx;
+		margin-top: 16rpx;
+	}
+
+	.hero-link {
+		padding: 12rpx 18rpx;
+		border-radius: 999rpx;
+		font-size: 22rpx;
+		color: var(--text-main);
+		background: rgba(255, 255, 255, 0.05);
+		border: 1px solid rgba(255, 255, 255, 0.08);
+	}
+
+	.hero-copy,
+	.hero-aside {
+		position: relative;
+		z-index: 1;
+	}
+
+	.hero-aside {
+		margin-top: 28rpx;
+	}
+
+	.hero-focus-panel {
+		padding: 26rpx;
+		border-radius: 28rpx;
+		background: linear-gradient(155deg, rgba(255, 212, 107, 0.16), rgba(135, 215, 255, 0.08));
+		border: 2rpx solid rgba(255, 212, 107, 0.14);
+	}
+
+	.focus-target {
+		display: block;
+		margin-top: 12rpx;
+		font-size: 42rpx;
+		line-height: 1.2;
+		font-weight: bold;
+		color: var(--text-main);
+	}
+
+	.hero-stats {
+		margin-top: 16rpx;
+	}
+
+	.hero-stat,
+	.summary-block,
+	.result-mini-card,
+	.gesture-item {
+		padding: 20rpx;
+		border-radius: 22rpx;
+		background: rgba(255, 255, 255, 0.04);
+		border: 1px solid rgba(255, 255, 255, 0.08);
+	}
+
+	.hero-stat-label,
+	.summary-label,
+	.result-mini-label,
+	.gesture-item-label,
+	.result-highlight-label {
+		display: block;
+		font-size: 22rpx;
+		color: var(--text-soft);
+	}
+
+	.hero-stat-value,
+	.summary-value,
+	.result-mini-value,
+	.gesture-item-value {
+		display: block;
+		margin-top: 10rpx;
+		font-size: 30rpx;
+		line-height: 1.4;
+		font-weight: bold;
+		color: var(--text-main);
+	}
+
+	.hero-stat-value-small {
+		font-size: 26rpx;
+	}
+
+	.gesture-panel {
+		border-style: dashed;
+	}
+
+	.gesture-grid {
+		display: grid;
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+		gap: 14rpx;
+		margin-top: 18rpx;
+	}
+
+	.tracking-summary-grid,
+	.result-grid,
+	.debug-grid {
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		gap: 14rpx;
+	}
+
+	.tracking-summary-grid {
+		margin-top: 18rpx;
+	}
+
+	.summary-block.strong,
+	.result-highlight {
+		background: linear-gradient(155deg, rgba(255, 212, 107, 0.16), rgba(135, 215, 255, 0.08));
+		border: 1px solid rgba(255, 212, 107, 0.18);
+	}
+
+	.guidance-panel,
+	.manual-input-panel,
+	.result-highlight,
+	.medicine-spotlight {
+		margin-top: 18rpx;
+		padding: 22rpx;
+		border-radius: 24rpx;
+	}
+
+	.guidance-panel {
+		background: linear-gradient(160deg, rgba(67, 113, 212, 0.14), rgba(84, 198, 192, 0.08));
+		border: 1px solid rgba(125, 190, 255, 0.18);
+	}
+
+	.guidance-meta,
+	.result-highlight-meta,
+	.result-item-meta,
+	.debug-line,
+	.debug-log,
+	.camera-caption {
+		display: block;
+		font-size: 22rpx;
+		line-height: 1.6;
+		color: var(--text-soft);
+		word-break: break-all;
+	}
+
+	.guidance-meta {
+		margin-top: 10rpx;
+	}
+
+	.manual-input-panel {
+		background: rgba(255, 212, 107, 0.08);
+		border: 1px solid rgba(255, 212, 107, 0.18);
+	}
+
+	.manual-title {
+		display: block;
+		margin-bottom: 12rpx;
+		font-size: 24rpx;
+		color: var(--accent-strong);
+	}
+
+	.manual-input {
+		height: 84rpx;
+		padding: 0 22rpx;
+		border-radius: 18rpx;
+		background: rgba(255, 255, 255, 0.06);
+		color: var(--text-main);
+		font-size: 28rpx;
+		border: 1px solid rgba(255, 255, 255, 0.08);
+	}
+
+	.manual-placeholder {
+		color: rgba(255, 255, 255, 0.34);
+	}
+
+	.manual-actions {
+		justify-content: flex-start;
+		flex-wrap: wrap;
+		margin-top: 14rpx;
+	}
+
+	.camera-wrap {
+		margin-top: 18rpx;
+		overflow: hidden;
+		border-radius: 26rpx;
+		position: relative;
+		border: 1px solid rgba(125, 190, 255, 0.18);
+	}
+
+	.tracking-camera {
+		width: 100%;
+		height: 400rpx;
+		display: block;
+	}
+
+	.camera-overlay {
+		position: absolute;
+		left: 0;
+		right: 0;
+		bottom: 0;
+		padding: 18rpx 20rpx;
+		background: linear-gradient(180deg, rgba(6, 10, 16, 0), rgba(6, 10, 16, 0.86));
+	}
+
+	.tracking-actions,
+	.utility-actions {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 14rpx;
+		margin-top: 20rpx;
+	}
+
+	.action-btn.subtle {
+		background: rgba(135, 215, 255, 0.08);
+		color: var(--text-main);
+		border: 1px solid rgba(135, 215, 255, 0.12);
+	}
+
+	.mini-btn {
+		height: 72rpx;
+		padding: 0 24rpx;
+		font-size: 24rpx;
+		margin: 0;
+	}
+
+	.tiny {
+		height: 54rpx;
+		padding: 0 18rpx;
+		font-size: 22rpx;
+		margin: 0;
+	}
+
+	.result-highlight-value {
+		display: block;
+		margin-top: 10rpx;
+		font-size: 42rpx;
+		line-height: 1.2;
+		font-weight: bold;
+		color: var(--text-main);
+	}
+
+	.result-grid {
+		margin-top: 16rpx;
+	}
+
+	.result-items {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 12rpx;
+		margin-top: 16rpx;
+	}
+
+	.result-item-chip {
+		min-width: 200rpx;
+		padding: 16rpx 18rpx;
+		border-radius: 18rpx;
+		background: rgba(255, 255, 255, 0.05);
+		border: 1px solid rgba(255, 255, 255, 0.08);
+	}
+
+	.result-item-name,
+	.medicine-spotlight-name {
+		display: block;
+		font-size: 28rpx;
+		line-height: 1.35;
+		font-weight: bold;
+		color: var(--text-main);
+	}
+
+	.medicine-spotlight {
+		background: linear-gradient(145deg, rgba(255, 170, 102, 0.14), rgba(255, 225, 149, 0.08));
+		border: 1px solid rgba(255, 194, 92, 0.2);
+	}
+
+	.medicine-spotlight-kicker {
+		display: block;
+		font-size: 22rpx;
+		color: #ffd976;
+		letter-spacing: 2rpx;
+	}
+
+	.warn-line {
+		color: #ffb0a6;
+		font-weight: bold;
+	}
+
+	.debug-panel {
+		background: rgba(7, 12, 18, 0.72);
+	}
+
+	.debug-grid {
+		margin-top: 8rpx;
+	}
+
+	.debug-log {
+		margin-top: 8rpx;
+		color: #93f5c2;
+	}
+
+	.font-large .hero-desc,
+	.font-large .section-desc,
+	.font-large .guidance-text,
+	.font-large .line,
+	.font-large .summary-value,
+	.font-large .hero-stat-value,
+	.font-large .result-highlight-value,
+	.font-large .gesture-item-value {
+		font-size: 34rpx;
+	}
+
+	@media screen and (max-width: 720px) {
+		.hero-topline {
+			flex-wrap: wrap;
+			align-items: flex-start;
+		}
+
+		.hero-shell {
+			grid-template-columns: 1fr;
+		}
+
+		.hero-stats,
+		.gesture-grid,
+		.tracking-summary-grid,
+		.result-grid,
+		.debug-grid {
+			grid-template-columns: 1fr;
+		}
+
 	}
 </style>

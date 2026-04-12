@@ -9,14 +9,17 @@ import zhCN from 'ant-design-vue/es/locale/zh_CN';
 
 const themeConfig = {
 	token: {
-		colorPrimary: '#0f766e',
-		colorInfo: '#0f766e',
-		colorSuccess: '#0f766e',
-		colorWarning: '#ea580c',
-		colorError: '#dc2626',
-		borderRadius: 16,
+		colorPrimary: '#14b8a6',
+		colorInfo: '#14b8a6',
+		colorSuccess: '#14b8a6',
+		colorWarning: '#f97316',
+		colorError: '#ef4444',
+		borderRadius: 18,
 		fontFamily: "'Bahnschrift', 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif",
-		boxShadowSecondary: '0 18px 40px rgba(15, 23, 42, 0.12)'
+		colorBgBase: '#0b1424',
+		colorTextBase: '#e2e8f0',
+		colorBorderSecondary: 'rgba(148, 163, 184, 0.18)',
+		boxShadowSecondary: '0 24px 64px rgba(2, 6, 23, 0.22)'
 	}
 };
 </script>

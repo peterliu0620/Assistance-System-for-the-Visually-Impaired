@@ -5,6 +5,7 @@ import com.example.admin.dto.AppUserResponse;
 import com.example.admin.dto.AppUserUpdateRequest;
 import com.example.admin.mapper.AppUserMapper;
 import com.example.admin.model.AppUser;
+import com.example.admin.util.StringValueUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -20,7 +21,7 @@ public class AppUserAdminService {
     private final BCryptPasswordEncoder passwordEncoder;
 
     public List<AppUserResponse> list(String keyword) {
-        return appUserMapper.findAll(trimToNull(keyword)).stream()
+        return appUserMapper.findAll(StringValueUtils.trimToNull(keyword)).stream()
                 .map(this::toResponse)
                 .toList();
     }
@@ -33,12 +34,12 @@ public class AppUserAdminService {
             throw new IllegalArgumentException("用户名已存在");
         }
 
-        String phone = trimToNull(request.getPhone());
+        String phone = StringValueUtils.trimToNull(request.getPhone());
         if (phone != null && appUserMapper.countByPhone(phone, null) > 0) {
             throw new IllegalArgumentException("手机号已存在");
         }
 
-        String email = trimToNull(request.getEmail());
+        String email = StringValueUtils.trimToNull(request.getEmail());
         if (email != null && appUserMapper.countByEmail(email, null) > 0) {
             throw new IllegalArgumentException("邮箱已存在");
         }
@@ -59,12 +60,12 @@ public class AppUserAdminService {
         validateStatus(request.getStatus());
         AppUser existing = requireUser(id);
 
-        String phone = trimToNull(request.getPhone());
+        String phone = StringValueUtils.trimToNull(request.getPhone());
         if (phone != null && appUserMapper.countByPhone(phone, id) > 0) {
             throw new IllegalArgumentException("手机号已存在");
         }
 
-        String email = trimToNull(request.getEmail());
+        String email = StringValueUtils.trimToNull(request.getEmail());
         if (email != null && appUserMapper.countByEmail(email, id) > 0) {
             throw new IllegalArgumentException("邮箱已存在");
         }
@@ -74,7 +75,7 @@ public class AppUserAdminService {
         existing.setEmail(email);
         existing.setStatus(request.getStatus());
 
-        String password = trimToNull(request.getPassword());
+        String password = StringValueUtils.trimToNull(request.getPassword());
         existing.setPasswordHash(password == null ? null : passwordEncoder.encode(password));
         appUserMapper.update(existing);
         return toResponse(requireUser(id));
@@ -112,13 +113,5 @@ public class AppUserAdminService {
         if (status == null || (status != 0 && status != 1)) {
             throw new IllegalArgumentException("状态只能是0或1");
         }
-    }
-
-    private String trimToNull(String value) {
-        if (value == null) {
-            return null;
-        }
-        String trimmed = value.trim();
-        return trimmed.isEmpty() ? null : trimmed;
     }
 }

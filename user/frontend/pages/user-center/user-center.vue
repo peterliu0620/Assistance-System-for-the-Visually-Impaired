@@ -1,62 +1,148 @@
 <template>
 	<view :class="['page', themeClass, largeFontClass]">
-		<view class="card">
-			<text class="title">个性化用户中心</text>
+		<view class="page-glow glow-one"></view>
+		<view class="page-glow glow-two"></view>
+		<view class="page-grid"></view>
 
-			<view class="section">
-				<text class="section-title">语音自定义</text>
-				<text class="label">语速：{{ form.speechRate.toFixed(2) }}x</text>
-				<slider :value="form.speechRate * 100" :min="50" :max="300" :step="1" activeColor="#ffcf4b" @change="onRateChange" />
+		<view class="hero-shell">
+			<view class="hero-copy">
+				<text class="eyebrow">Personal Center</text>
+				<text class="hero-title">把语音、手势和视觉辅助调成最适合你的状态</text>
+				<text class="hero-desc">这里集中管理播报方式、手势映射、振动强度和低视力适配，让首页反馈更贴合你的使用习惯。</text>
 
-				<text class="label">音色</text>
-				<picker :range="voiceOptions" range-key="label" :value="voiceIndex" @change="onVoiceChange">
-					<view class="picker">{{ voiceOptions[voiceIndex].label }}</view>
-				</picker>
-
-				<text class="label">播报粒度</text>
-				<picker :range="granularityOptions" range-key="label" :value="granularityIndex" @change="onGranularityChange">
-					<view class="picker">{{ granularityOptions[granularityIndex].label }}</view>
-				</picker>
-			</view>
-
-			<view class="section">
-				<text class="section-title">多维交互</text>
-				<text class="label">单击手势</text>
-				<picker :range="gestureOptions" range-key="label" :value="gestureSingleIndex" @change="onGestureChange('gestureSingleTap', $event)">
-					<view class="picker">{{ gestureOptions[gestureSingleIndex].label }}</view>
-				</picker>
-
-				<text class="label">双击手势</text>
-				<picker :range="gestureOptions" range-key="label" :value="gestureDoubleIndex" @change="onGestureChange('gestureDoubleTap', $event)">
-					<view class="picker">{{ gestureOptions[gestureDoubleIndex].label }}</view>
-				</picker>
-
-				<text class="label">长按手势</text>
-				<picker :range="gestureOptions" range-key="label" :value="gestureLongIndex" @change="onGestureChange('gestureLongPress', $event)">
-					<view class="picker">{{ gestureOptions[gestureLongIndex].label }}</view>
-				</picker>
-
-				<text class="label">振动强度：{{ hapticLabel }}</text>
-				<slider :value="form.hapticLevel" :min="1" :max="3" :step="1" activeColor="#ffcf4b" @change="onHapticChange" />
-				<button class="btn ghost" @click="testHaptic">测试振动</button>
-			</view>
-
-			<view class="section">
-				<text class="section-title">低视力适配</text>
-				<text class="label">高对比模式</text>
-				<picker :range="contrastOptions" range-key="label" :value="contrastIndex" @change="onContrastChange">
-					<view class="picker">{{ contrastOptions[contrastIndex].label }}</view>
-				</picker>
-
-				<view class="switch-row">
-					<text class="label">超大字符渲染</text>
-					<switch :checked="form.extraLargeText" @change="onLargeTextChange" color="#ffcf4b" />
+				<view class="hero-actions">
+					<button class="action-btn primary" @click="save">保存设置</button>
+					<button class="action-btn ghost" @click="backToHome">返回首页</button>
 				</view>
 			</view>
 
-			<button class="btn primary" @click="save">保存设置</button>
-			<button class="btn" @click="goKnowledge">打开知识库</button>
-			<button class="btn" @click="backToHome">返回识别页</button>
+			<view class="hero-stats">
+				<view class="stat-card stat-card-strong">
+					<text class="stat-label">语速</text>
+					<text class="stat-value">{{ form.speechRate.toFixed(2) }}x</text>
+				</view>
+				<view class="stat-card">
+					<text class="stat-label">音色</text>
+					<text class="stat-value stat-value-small">{{ voiceOptions[voiceIndex].label }}</text>
+				</view>
+				<view class="stat-card">
+					<text class="stat-label">振动强度</text>
+					<text class="stat-value">{{ hapticLabel }}</text>
+				</view>
+				<view class="stat-card">
+					<text class="stat-label">对比模式</text>
+					<text class="stat-value stat-value-small">{{ contrastOptions[contrastIndex].label }}</text>
+				</view>
+			</view>
+		</view>
+
+		<view class="section-panel">
+			<view class="section-head">
+				<view>
+					<text class="section-kicker">播报偏好</text>
+					<text class="section-title">语音自定义</text>
+				</view>
+				<text class="section-tag">实时生效</text>
+			</view>
+
+			<view class="control-panel">
+				<text class="label">语速：{{ form.speechRate.toFixed(2) }}x</text>
+				<slider :value="form.speechRate * 100" :min="50" :max="300" :step="1" activeColor="#ffd46b" @change="onRateChange" />
+			</view>
+
+			<view class="control-grid">
+				<view class="control-panel">
+					<text class="label">音色</text>
+					<picker :range="voiceOptions" range-key="label" :value="voiceIndex" @change="onVoiceChange">
+						<view class="picker">{{ voiceOptions[voiceIndex].label }}</view>
+					</picker>
+				</view>
+
+				<view class="control-panel">
+					<text class="label">播报粒度</text>
+					<picker :range="granularityOptions" range-key="label" :value="granularityIndex" @change="onGranularityChange">
+						<view class="picker">{{ granularityOptions[granularityIndex].label }}</view>
+					</picker>
+				</view>
+			</view>
+		</view>
+
+		<view class="section-panel">
+			<view class="section-head">
+				<view>
+					<text class="section-kicker">触发方式</text>
+					<text class="section-title">多维交互</text>
+				</view>
+				<text class="section-tag">手势 + 振动</text>
+			</view>
+
+			<view class="control-grid">
+				<view class="control-panel">
+					<text class="label">单击手势</text>
+					<picker :range="gestureOptions" range-key="label" :value="gestureSingleIndex" @change="onGestureChange('gestureSingleTap', $event)">
+						<view class="picker">{{ gestureOptions[gestureSingleIndex].label }}</view>
+					</picker>
+				</view>
+
+				<view class="control-panel">
+					<text class="label">双击手势</text>
+					<picker :range="gestureOptions" range-key="label" :value="gestureDoubleIndex" @change="onGestureChange('gestureDoubleTap', $event)">
+						<view class="picker">{{ gestureOptions[gestureDoubleIndex].label }}</view>
+					</picker>
+				</view>
+
+				<view class="control-panel">
+					<text class="label">长按手势</text>
+					<picker :range="gestureOptions" range-key="label" :value="gestureLongIndex" @change="onGestureChange('gestureLongPress', $event)">
+						<view class="picker">{{ gestureOptions[gestureLongIndex].label }}</view>
+					</picker>
+				</view>
+
+				<view class="control-panel">
+					<text class="label">振动强度：{{ hapticLabel }}</text>
+					<slider :value="form.hapticLevel" :min="1" :max="3" :step="1" activeColor="#ffd46b" @change="onHapticChange" />
+					<button class="action-btn ghost compact-btn" @click="testHaptic">测试振动</button>
+				</view>
+			</view>
+		</view>
+
+		<view class="section-panel">
+			<view class="section-head">
+				<view>
+					<text class="section-kicker">低视力支持</text>
+					<text class="section-title">视觉适配</text>
+				</view>
+				<text class="section-tag">可读性优先</text>
+			</view>
+
+			<view class="control-grid">
+				<view class="control-panel">
+					<text class="label">高对比模式</text>
+					<picker :range="contrastOptions" range-key="label" :value="contrastIndex" @change="onContrastChange">
+						<view class="picker">{{ contrastOptions[contrastIndex].label }}</view>
+					</picker>
+				</view>
+
+				<view class="control-panel switch-panel">
+					<text class="label">超大字符渲染</text>
+					<switch :checked="form.extraLargeText" @change="onLargeTextChange" color="#ffd46b" />
+				</view>
+			</view>
+		</view>
+
+		<view class="section-panel shortcut-panel">
+			<view class="section-head">
+				<view>
+					<text class="section-kicker">快捷入口</text>
+					<text class="section-title">继续浏览</text>
+				</view>
+			</view>
+
+			<view class="action-row">
+				<button class="action-btn primary" @click="save">保存设置</button>
+				<button class="action-btn ghost" @click="goKnowledge">打开知识库</button>
+				<button class="action-btn ghost" @click="backToHome">返回识别页</button>
+			</view>
 		</view>
 	</view>
 </template>
@@ -181,101 +267,62 @@
 </script>
 
 <style>
-	.page {
-		min-height: 100vh;
-		padding: 24rpx;
-		background: radial-gradient(130% 100% at 15% 0%, #1a2f4a 0%, #090d14 64%);
-	}
-
-	.card {
-		border-radius: 18rpx;
-		padding: 24rpx;
-		box-shadow: var(--shadow-lg);
-		backdrop-filter: blur(10rpx);
-	}
-
-	.theme-gold .card {
-		border: 2rpx solid rgba(255, 207, 75, 0.45);
-		background: linear-gradient(160deg, rgba(22, 28, 36, 0.88), rgba(10, 14, 20, 0.9));
-	}
-
-	.theme-yellow .card {
-		border: 2rpx solid rgba(255, 230, 0, 0.58);
-		background: linear-gradient(160deg, rgba(22, 21, 11, 0.9), rgba(11, 11, 8, 0.92));
-	}
-
-	.title {
-		display: block;
-		font-size: 40rpx;
-		font-weight: bold;
-		color: #f3f5f8;
-		margin-bottom: 16rpx;
-	}
-
-	.section {
-		margin-bottom: 20rpx;
-		padding: 16rpx;
-		border-radius: 12rpx;
-		background: rgba(255, 255, 255, 0.05);
-		border: 1px solid rgba(110, 144, 185, 0.24);
-	}
-
-	.section-title {
-		display: block;
-		font-size: 30rpx;
-		color: #ffcf4b;
-		font-weight: bold;
-		margin-bottom: 8rpx;
-	}
+	@import '../../styles/experience-shell.css';
 
 	.label {
 		display: block;
-		font-size: 26rpx;
-		color: #d8dde5;
-		margin: 8rpx 0;
+		font-size: 28rpx;
+		line-height: 1.7;
+		color: var(--text-soft);
+	}
+
+	.control-grid {
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		gap: 14rpx;
+	}
+
+	.control-panel {
+		padding: 22rpx;
+		border-radius: 24rpx;
+		background: rgba(255, 255, 255, 0.04);
+		border: 1px solid rgba(255, 255, 255, 0.08);
+	}
+
+	.control-panel + .control-panel {
+		margin-top: 0;
 	}
 
 	.picker {
-		background: rgba(12, 17, 24, 0.92);
-		border: 1px solid rgba(99, 133, 175, 0.38);
-		border-radius: 10rpx;
-		padding: 16rpx;
-		color: #f0f5ff;
-		font-size: 26rpx;
+		margin-top: 10rpx;
+		padding: 18rpx 20rpx;
+		border-radius: 20rpx;
+		background: rgba(255, 255, 255, 0.05);
+		border: 1px solid rgba(255, 255, 255, 0.08);
+		color: var(--text-main);
+		font-size: 28rpx;
 	}
 
-	.switch-row {
+	.switch-panel {
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
 	}
 
-	.btn {
-		margin-top: 12rpx;
-		background: linear-gradient(145deg, #2a3d53, #1f2e40);
-		color: #ffffff;
-	}
-
-	.btn.primary {
-		background: #ffcf4b;
-		color: #161a20;
-		font-weight: bold;
-	}
-
-	.btn.ghost {
-		background: #1e2630;
-	}
-
-	.font-large .title {
-		font-size: 48rpx;
-	}
-
-	.font-large .section-title {
-		font-size: 36rpx;
+	.compact-btn {
+		margin-top: 16rpx;
+		min-width: 0;
 	}
 
 	.font-large .label,
-	.font-large .picker {
-		font-size: 32rpx;
+	.font-large .picker,
+	.font-large .stat-value {
+		font-size: 34rpx;
+	}
+
+	@media screen and (max-width: 720px) {
+		.control-grid {
+			grid-template-columns: 1fr;
+		}
 	}
 </style>

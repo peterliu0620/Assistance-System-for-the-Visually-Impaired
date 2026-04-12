@@ -30,7 +30,7 @@
 	export default {
 		data() {
 			return {
-				apiBase: 'http://10.135.102.177:8080',
+				apiBase: 'http://10.69.65.44:8080',
 				mode: 'login',
 				loading: false,
 				userInfo: null,

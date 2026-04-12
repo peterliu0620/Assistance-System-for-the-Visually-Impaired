@@ -4,6 +4,9 @@ import { hasAuthToken } from '@/lib/auth';
 
 const DashboardView = () => import('@/views/DashboardView.vue');
 const AppUsersView = () => import('@/views/AppUsersView.vue');
+const FamilyBindingsView = () => import('@/views/FamilyBindingsView.vue');
+const SharedLogsView = () => import('@/views/SharedLogsView.vue');
+const MedicineProfilesView = () => import('@/views/MedicineProfilesView.vue');
 const LoginView = () => import('@/views/LoginView.vue');
 
 const router = createRouter({
@@ -33,6 +36,21 @@ const router = createRouter({
           path: 'app-users',
           name: 'app-users',
           component: AppUsersView
+        },
+        {
+          path: 'family-bindings',
+          name: 'family-bindings',
+          component: FamilyBindingsView
+        },
+        {
+          path: 'shared-logs',
+          name: 'shared-logs',
+          component: SharedLogsView
+        },
+        {
+          path: 'medicine-profiles',
+          name: 'medicine-profiles',
+          component: MedicineProfilesView
         }
       ]
     },

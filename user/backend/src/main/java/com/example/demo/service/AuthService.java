@@ -5,6 +5,7 @@ import com.example.demo.dto.RegisterRequest;
 import com.example.demo.dto.UserAuthResponse;
 import com.example.demo.mapper.SysUserMapper;
 import com.example.demo.model.SysUser;
+import com.example.demo.util.StringValueUtils;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -29,12 +30,12 @@ public class AuthService {
             throw new IllegalArgumentException("用户名已存在");
         }
 
-        String phone = trimToNull(request.getPhone());
+        String phone = StringValueUtils.trimToNull(request.getPhone());
         if (phone != null && sysUserMapper.countByPhone(phone) > 0) {
             throw new IllegalArgumentException("手机号已存在");
         }
 
-        String email = trimToNull(request.getEmail());
+        String email = StringValueUtils.trimToNull(request.getEmail());
         if (email != null && sysUserMapper.countByEmail(email) > 0) {
             throw new IllegalArgumentException("邮箱已存在");
         }
@@ -64,13 +65,5 @@ public class AuthService {
 
         sysUserMapper.updateLastLoginAt(user.getId(), LocalDateTime.now());
         return new UserAuthResponse(user.getId(), user.getUsername(), user.getNickname());
-    }
-
-    private String trimToNull(String value) {
-        if (value == null) {
-            return null;
-        }
-        String trimmed = value.trim();
-        return trimmed.isEmpty() ? null : trimmed;
     }
 }

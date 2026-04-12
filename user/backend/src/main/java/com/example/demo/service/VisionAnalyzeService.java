@@ -28,6 +28,7 @@ public class VisionAnalyzeService {
 
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final KnowledgeService knowledgeService;
+    private final MedicineSafetyService medicineSafetyService;
 
     @Value("${vision.qwen.base-url:https://dashscope.aliyuncs.com}")
     private String qwenBaseUrl;
@@ -38,8 +39,9 @@ public class VisionAnalyzeService {
     @Value("${vision.qwen.vl-model:qwen-vl-plus-latest}")
     private String vlModel;
 
-    public VisionAnalyzeService(KnowledgeService knowledgeService) {
+    public VisionAnalyzeService(KnowledgeService knowledgeService, MedicineSafetyService medicineSafetyService) {
         this.knowledgeService = knowledgeService;
+        this.medicineSafetyService = medicineSafetyService;
     }
 
     public VisionAnalyzeResponse analyze(MultipartFile image, String command, Long userId, String sessionId,
@@ -70,9 +72,15 @@ public class VisionAnalyzeService {
                     scene,
                     "已按“场景 > 方位 > 核心物品”完成播报。",
                     items,
-                    narration
+                    narration,
+                    null,
+                    null
             );
-            knowledgeService.archiveAnalyze(userId, sessionId, response, latitude, longitude, locationText);
+            MedicineSafetyService.MedicineMatchResult medicineMatchResult = medicineSafetyService.matchMedicine(userId, response);
+            response.setMatchedMedicineProfileSummary(medicineMatchResult.getMatchedSummary());
+            response.setMedicineAlert(medicineMatchResult.getMedicineAlert());
+            Long recordId = knowledgeService.archiveAnalyze(userId, sessionId, response, latitude, longitude, locationText);
+            medicineSafetyService.persistAlertIfNeeded(userId, recordId, medicineMatchResult);
             return response;
         } catch (Exception ex) {
             throw new IllegalStateException("视觉识别失败: " + ex.getMessage());

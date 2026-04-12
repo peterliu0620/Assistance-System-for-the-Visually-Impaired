@@ -1,55 +1,108 @@
 <template>
 	<view :class="['page', themeClass, largeFontClass]">
-		<view class="card">
-			<text class="title">智能知识库</text>
-			<text class="desc">自动归档识别记录，并支持围绕最近会话和今日记录进行自然语言追问。</text>
+		<view class="page-glow glow-one"></view>
+		<view class="page-glow glow-two"></view>
+		<view class="page-grid"></view>
 
-			<view class="stats-grid">
-				<view class="stat-card strong">
+		<view class="hero-shell">
+			<view class="hero-copy">
+				<text class="eyebrow">Knowledge Archive</text>
+				<text class="hero-title">把识别记录沉淀成可追问的知识库</text>
+				<text class="hero-desc">这里会自动归档最近识别结果，并围绕最近会话继续追问，帮助你把单次识别延展成连续理解。</text>
+
+				<view class="hero-actions">
+					<button class="action-btn primary" @click="refreshRecords">刷新记录</button>
+					<button class="action-btn ghost" @click="goHome">返回首页</button>
+				</view>
+			</view>
+
+			<view class="hero-stats">
+				<view class="stat-card stat-card-strong">
 					<text class="stat-label">今日扫描</text>
 					<text class="stat-value">{{ knowledge.todayScanCount }}</text>
 				</view>
 				<view class="stat-card">
 					<text class="stat-label">最近会话</text>
-					<text class="stat-value small">{{ knowledge.latestSessionId || '-' }}</text>
+					<text class="stat-value stat-value-small">{{ knowledge.latestSessionId || '-' }}</text>
+				</view>
+				<view class="stat-card">
+					<text class="stat-label">归档数量</text>
+					<text class="stat-value">{{ knowledge.records.length }}</text>
+				</view>
+				<view class="stat-card">
+					<text class="stat-label">最近回答</text>
+					<text class="stat-value stat-value-small">{{ knowledge.lastAnswer ? '已生成' : '暂无' }}</text>
 				</view>
 			</view>
 		</view>
 
-		<view class="card">
-			<text class="section-title">知识问答</text>
+		<view class="section-panel ask-panel">
+			<view class="section-head">
+				<view>
+					<text class="section-kicker">连续追问</text>
+					<text class="section-title">知识问答</text>
+				</view>
+				<text class="section-tag">围绕最近会话</text>
+			</view>
+
 			<input
 				v-model="questionInput"
 				class="ask-input"
 				placeholder="例如：刚才那个瓶子左边是什么？"
 				placeholder-class="placeholder"
 			/>
-			<view class="ask-actions">
-				<button class="btn primary" @click="askQuestion" :disabled="asking">提问</button>
-				<button class="btn" @click="refreshRecords">刷新记录</button>
+
+			<view class="action-row">
+				<button class="action-btn primary" @click="askQuestion" :disabled="asking">{{ asking ? '提问中' : '开始提问' }}</button>
+				<button class="action-btn ghost" @click="refreshRecords">同步归档</button>
 			</view>
 
-			<view v-if="knowledge.lastAnswer" class="answer-card">
-				<text class="answer-title">最近回答</text>
+			<view v-if="knowledge.lastAnswer" class="answer-panel">
+				<text class="panel-kicker">最近回答</text>
 				<text class="answer-text">{{ knowledge.lastAnswer }}</text>
 			</view>
 		</view>
 
-		<view class="card">
-			<text class="section-title">最近归档</text>
-			<view v-if="!knowledge.records.length" class="empty-box">
-				<text class="empty-text">还没有归档记录，先去识别一次物品吧。</text>
+		<view class="section-panel archive-panel">
+			<view class="section-head">
+				<view>
+					<text class="section-kicker">结构化记录</text>
+					<text class="section-title">最近归档</text>
+				</view>
+				<text class="section-tag">最近 8 条</text>
 			</view>
-			<view v-for="record in knowledge.records" :key="record.id" class="record-card">
-				<text class="record-title">{{ record.scene || '未知场景' }}</text>
-				<text class="record-line">指令：{{ record.triggerCommand || '-' }}</text>
-				<text class="record-line">地点：{{ record.locationText || '未记录地点' }}</text>
-				<text class="record-line">时间：{{ formatTime(record.capturedAt) }}</text>
+
+			<view v-if="!knowledge.records.length" class="empty-panel">
+				<text class="empty-title">还没有归档记录</text>
+				<text class="empty-text">先回到首页识别一次物品，再回来继续追问会更完整。</text>
+				<button class="action-btn primary compact-btn" @click="goHome">去识别页</button>
+			</view>
+
+			<view v-for="record in knowledge.records" :key="record.id" class="record-panel">
+				<view class="record-head">
+					<text class="record-title">{{ record.scene || '未知场景' }}</text>
+					<text class="record-time">{{ formatTime(record.capturedAt) }}</text>
+				</view>
+
+				<view class="record-grid">
+					<view class="record-meta">
+						<text class="record-meta-label">触发指令</text>
+						<text class="record-meta-value">{{ record.triggerCommand || '-' }}</text>
+					</view>
+					<view class="record-meta">
+						<text class="record-meta-label">地点</text>
+						<text class="record-meta-value">{{ record.locationText || '未记录地点' }}</text>
+					</view>
+				</view>
+
 				<text class="record-line">播报：{{ record.narration || '-' }}</text>
-				<text class="record-subtitle">物品明细</text>
-				<text v-for="item in record.items || []" :key="item.id" class="record-line item-line">
-					{{ item.name }} / {{ item.position || '未知方位' }} / 置信度 {{ item.confidence || 0 }}%
-				</text>
+
+				<view class="item-list" v-if="record.items && record.items.length">
+					<view v-for="item in record.items || []" :key="item.id" class="item-chip">
+						<text class="item-name">{{ item.name }}</text>
+						<text class="item-meta">{{ item.position || '未知方位' }} / 置信度 {{ item.confidence || 0 }}%</text>
+					</view>
+				</view>
 			</view>
 		</view>
 	</view>
@@ -165,188 +218,166 @@
 						uni.showToast({ title: '提问失败', icon: 'none' })
 					}
 				})
+			},
+			goHome() {
+				uni.navigateBack({
+					fail: () => {
+						uni.reLaunch({ url: '/pages/index/index' })
+					}
+				})
 			}
 		}
 	}
 </script>
 
 <style>
-	.page {
-		min-height: 100vh;
-		padding: 24rpx;
-	}
+	@import '../../styles/experience-shell.css';
 
-	.theme-gold {
-		background: radial-gradient(130% 100% at 15% 0%, #1a2f4a 0%, #090d14 64%);
-	}
-
-	.theme-yellow {
-		background: radial-gradient(130% 100% at 15% 0%, #2d250d 0%, #090d14 64%);
-	}
-
-	.card {
-		margin-bottom: 20rpx;
-		padding: 24rpx;
-		border-radius: 18rpx;
-		box-shadow: var(--shadow-lg);
-	}
-
-	.theme-gold .card {
-		border: 2rpx solid rgba(255, 207, 75, 0.35);
-		background: linear-gradient(160deg, rgba(22, 28, 36, 0.88), rgba(10, 14, 20, 0.9));
-	}
-
-	.theme-yellow .card {
-		border: 2rpx solid rgba(255, 230, 0, 0.45);
-		background: linear-gradient(160deg, rgba(22, 21, 11, 0.9), rgba(11, 11, 8, 0.92));
-	}
-
-	.title,
-	.section-title,
-	.answer-title,
-	.record-title {
-		display: block;
-		color: #f5f7fb;
-		font-weight: bold;
-	}
-
-	.title {
-		font-size: 40rpx;
-		margin-bottom: 12rpx;
-	}
-
-	.section-title,
-	.answer-title {
-		font-size: 30rpx;
-		margin-bottom: 12rpx;
-	}
-
-	.record-title {
-		font-size: 28rpx;
-		margin-bottom: 8rpx;
-	}
-
-	.desc,
-	.record-line,
 	.answer-text,
+	.record-line,
 	.empty-text {
 		display: block;
-		color: #d5deea;
-		font-size: 24rpx;
+		font-size: 28rpx;
 		line-height: 1.7;
+		color: var(--text-soft);
 	}
 
-	.stats-grid {
-		display: grid;
-		grid-template-columns: repeat(2, minmax(0, 1fr));
-		gap: 12rpx;
-		margin-top: 16rpx;
+	.record-head {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 14rpx;
 	}
 
-	.stat-card {
-		padding: 18rpx;
-		border-radius: 14rpx;
-		background: rgba(255, 255, 255, 0.05);
-	}
-
-	.stat-card.strong {
-		background: linear-gradient(145deg, rgba(255, 207, 75, 0.16), rgba(100, 214, 255, 0.12));
-	}
-
-	.stat-label {
+	.empty-title,
+	.record-title {
 		display: block;
-		font-size: 22rpx;
-		color: #9bb4cd;
-	}
-
-	.stat-value {
-		display: block;
-		margin-top: 8rpx;
-		font-size: 34rpx;
-		color: #fff4d4;
+		color: var(--text-main);
 		font-weight: bold;
 	}
 
-	.stat-value.small {
+	.record-grid {
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		gap: 14rpx;
+	}
+
+	.record-meta,
+	.item-chip,
+	.answer-panel,
+	.empty-panel,
+	.record-panel {
+		border-radius: 24rpx;
+	}
+
+	.record-meta-label {
+		display: block;
 		font-size: 22rpx;
-		word-break: break-all;
+		color: var(--text-soft);
+	}
+
+	.record-meta-value {
+		display: block;
+		margin-top: 10rpx;
+		font-size: 32rpx;
+		line-height: 1.35;
+		font-weight: bold;
+		color: var(--text-main);
 	}
 
 	.ask-input {
-		height: 84rpx;
-		padding: 0 18rpx;
-		border-radius: 12rpx;
-		background: rgba(8, 12, 18, 0.92);
-		border: 1px solid rgba(99, 133, 175, 0.38);
-		color: #f0f5ff;
-		font-size: 26rpx;
+		height: 90rpx;
+		margin-top: 18rpx;
+		padding: 0 22rpx;
+		border-radius: 22rpx;
+		background: rgba(255, 255, 255, 0.05);
+		border: 1px solid rgba(255, 255, 255, 0.08);
+		color: var(--text-main);
+		font-size: 28rpx;
 	}
 
 	.placeholder {
-		color: #7f96ac;
+		color: rgba(255, 255, 255, 0.34);
 	}
 
-	.ask-actions {
+	.compact-btn {
+		margin-top: 20rpx;
+		min-width: 0;
+	}
+
+	.answer-panel,
+	.empty-panel,
+	.record-panel {
+		margin-top: 18rpx;
+		padding: 22rpx;
+		background: rgba(255, 255, 255, 0.04);
+		border: 1px solid rgba(255, 255, 255, 0.08);
+	}
+
+	.answer-panel {
+		background: linear-gradient(160deg, rgba(67, 113, 212, 0.14), rgba(84, 198, 192, 0.08));
+		border-color: rgba(125, 190, 255, 0.18);
+	}
+
+	.empty-title {
+		font-size: 34rpx;
+	}
+
+	.record-title {
+		font-size: 32rpx;
+	}
+
+	.record-time,
+	.item-meta {
+		display: block;
+		font-size: 22rpx;
+		line-height: 1.6;
+		color: var(--text-soft);
+	}
+
+	.record-grid {
+		margin-top: 16rpx;
+	}
+
+	.item-list {
 		display: flex;
+		flex-wrap: wrap;
 		gap: 12rpx;
 		margin-top: 16rpx;
 	}
 
-	.btn {
-		flex: 1;
-		height: 78rpx;
-		line-height: 78rpx;
-		font-size: 24rpx;
-		border-radius: 12rpx;
-		margin: 0;
-		background: linear-gradient(145deg, #2a3d53, #1f2e40);
-		color: #ffffff;
-	}
-
-	.btn.primary {
-		background: #ffcf4b;
-		color: #161a20;
-		font-weight: bold;
-	}
-
-	.answer-card,
-	.record-card,
-	.empty-box {
-		margin-top: 16rpx;
-		padding: 18rpx;
-		border-radius: 14rpx;
+	.item-chip {
+		min-width: 200rpx;
+		padding: 16rpx 18rpx;
 		background: rgba(255, 255, 255, 0.05);
-		border: 1px solid rgba(110, 144, 185, 0.24);
+		border: 1px solid rgba(255, 255, 255, 0.08);
 	}
 
-	.record-subtitle {
+	.item-name {
 		display: block;
-		margin-top: 10rpx;
-		margin-bottom: 6rpx;
-		font-size: 24rpx;
-		color: #ffcf4b;
+		font-size: 26rpx;
 		font-weight: bold;
+		color: var(--text-main);
 	}
 
-	.item-line {
-		color: #bfe7ff;
-	}
-
-	.font-large .title {
-		font-size: 48rpx;
-	}
-
-	.font-large .section-title,
-	.font-large .record-title,
-	.font-large .answer-title {
+	.font-large .hero-title,
+	.font-large .answer-text,
+	.font-large .record-line,
+	.font-large .empty-text,
+	.font-large .ask-input,
+	.font-large .stat-value,
+	.font-large .record-meta-value {
 		font-size: 34rpx;
 	}
 
-	.font-large .desc,
-	.font-large .record-line,
-	.font-large .answer-text,
-	.font-large .empty-text,
-	.font-large .ask-input {
-		font-size: 30rpx;
+	@media screen and (max-width: 720px) {
+		.record-head {
+			flex-wrap: wrap;
+			align-items: flex-start;
+		}
+
+		.record-grid {
+			grid-template-columns: 1fr;
+		}
 	}
 </style>

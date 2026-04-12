@@ -18,4 +18,6 @@ public class VisionAnalyzeResponse {
     private String positionSummary;
     private List<VisionItem> items;
     private String narration;
+    private MatchedMedicineProfileSummary matchedMedicineProfileSummary;
+    private MedicineAlert medicineAlert;
 }

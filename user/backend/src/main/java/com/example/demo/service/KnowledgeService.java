@@ -10,6 +10,7 @@ import com.example.demo.dto.VisionItem;
 import com.example.demo.mapper.KnowledgeMapper;
 import com.example.demo.model.ScanItem;
 import com.example.demo.model.ScanRecord;
+import com.example.demo.util.StringValueUtils;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.openai.OpenAiChatModel;
@@ -44,14 +45,14 @@ public class KnowledgeService {
     private String vlModel;
 
     @Transactional
-    public void archiveAnalyze(Long userId,
+    public Long archiveAnalyze(Long userId,
                                String sessionId,
                                VisionAnalyzeResponse response,
                                Double latitude,
                                Double longitude,
                                String locationText) {
         if (userId == null || response == null) {
-            return;
+            return null;
         }
         ScanRecord record = new ScanRecord();
         record.setUserId(userId);
@@ -64,7 +65,7 @@ public class KnowledgeService {
         record.setCapturedAt(response.getCapturedAt() == null ? LocalDateTime.now() : response.getCapturedAt());
         record.setLatitude(latitude);
         record.setLongitude(longitude);
-        record.setLocationText(trimToNull(locationText));
+        record.setLocationText(StringValueUtils.trimToNull(locationText));
         knowledgeMapper.insertRecord(record);
 
         List<VisionItem> items = response.getItems() == null ? List.of() : response.getItems();
@@ -75,10 +76,11 @@ public class KnowledgeService {
             item.setName(source.getName());
             item.setPosition(source.getPosition());
             item.setConfidence(source.getConfidence());
-            item.setAttributesJson(toJson(Map.of("category", inferCategory(source.getName()))));
+            item.setAttributesJson(toJson(buildAnalyzeItemAttributes(source, i == 0, response)));
             item.setIsPrimary(i == 0);
             knowledgeMapper.insertItem(item);
         }
+        return record.getId();
     }
 
     @Transactional
@@ -110,7 +112,7 @@ public class KnowledgeService {
         record.setCapturedAt(response.getAnalyzedAt() == null ? LocalDateTime.now() : response.getAnalyzedAt());
         record.setLatitude(latitude);
         record.setLongitude(longitude);
-        record.setLocationText(trimToNull(locationText));
+        record.setLocationText(StringValueUtils.trimToNull(locationText));
         knowledgeMapper.insertRecord(record);
 
         ScanItem item = new ScanItem();
@@ -145,12 +147,12 @@ public class KnowledgeService {
         if (userId == null) {
             throw new IllegalArgumentException("用户ID不能为空");
         }
-        String normalizedQuestion = trimToNull(question);
+        String normalizedQuestion = StringValueUtils.trimToNull(question);
         if (normalizedQuestion == null) {
             throw new IllegalArgumentException("问题不能为空");
         }
 
-        String usedSessionId = trimToNull(sessionId);
+        String usedSessionId = StringValueUtils.trimToNull(sessionId);
         if (usedSessionId == null) {
             usedSessionId = knowledgeMapper.findLatestSessionId(userId);
         }
@@ -230,7 +232,7 @@ public class KnowledgeService {
             String context = buildAskContext(record, items);
             String prompt = "请仅基于以下结构化记录回答用户问题，不要编造不存在的物体。问题：" + question + "。上下文：" + context;
             String answer = model.chat(prompt);
-            return trimToNull(answer) == null ? fallback : answer.trim();
+            return StringValueUtils.trimToNull(answer) == null ? fallback : answer.trim();
         } catch (Exception ex) {
             return fallback;
         }
@@ -427,6 +429,25 @@ public class KnowledgeService {
         return "普通物品";
     }
 
+    private Map<String, Object> buildAnalyzeItemAttributes(VisionItem item, boolean primary, VisionAnalyzeResponse response) {
+        Map<String, Object> attributes = new java.util.LinkedHashMap<>();
+        attributes.put("category", inferCategory(item.getName()));
+        if (primary && response.getMatchedMedicineProfileSummary() != null) {
+            attributes.put("matchedMedicineProfileId", response.getMatchedMedicineProfileSummary().getId());
+            attributes.put("matchedMedicineName", response.getMatchedMedicineProfileSummary().getMedicineName());
+            attributes.put("dosageUsage", response.getMatchedMedicineProfileSummary().getDosageUsage());
+            attributes.put("suitablePeople", response.getMatchedMedicineProfileSummary().getSuitablePeople());
+            attributes.put("contraindications", response.getMatchedMedicineProfileSummary().getContraindications());
+            attributes.put("expiryDate", response.getMatchedMedicineProfileSummary().getExpiryDate());
+        }
+        if (primary && response.getMedicineAlert() != null && Boolean.TRUE.equals(response.getMedicineAlert().getTriggered())) {
+            attributes.put("medicineAlertType", response.getMedicineAlert().getAlertType());
+            attributes.put("medicineAlertLevel", response.getMedicineAlert().getWarningLevel());
+            attributes.put("medicineAlertMessage", response.getMedicineAlert().getAlertMessage());
+        }
+        return attributes;
+    }
+
     private String toJson(Object value) {
         try {
             return objectMapper.writeValueAsString(value);
@@ -443,16 +464,8 @@ public class KnowledgeService {
         return value == null || value.isBlank() ? fallback : value;
     }
 
-    private String trimToNull(String value) {
-        if (value == null) {
-            return null;
-        }
-        String trimmed = value.trim();
-        return trimmed.isEmpty() ? null : trimmed;
-    }
-
     private String emptyToNull(String value) {
-        return trimToNull(value);
+        return StringValueUtils.trimToNull(value);
     }
 
     private String normalizeBaseUrl(String baseUrl) {

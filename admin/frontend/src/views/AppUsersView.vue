@@ -189,7 +189,7 @@
 				<a-form-item
 					label="手机号"
 					name="phone"
-					:rules="[{ pattern: /^$|^1\\d{10}$/, message: '手机号格式不正确' }]"
+					:rules="[{ pattern: PHONE_PATTERN, message: '手机号格式不正确' }]"
 				>
 					<a-input v-model:value="formState.phone" placeholder="选填，11 位手机号" />
 				</a-form-item>
@@ -197,7 +197,7 @@
 				<a-form-item
 					label="邮箱"
 					name="email"
-					:rules="[{ pattern: /^$|^[\\w.-]+@[\\w.-]+\\.[A-Za-z]{2,}$/, message: '邮箱格式不正确' }]"
+					:rules="[{ pattern: EMAIL_PATTERN, message: '邮箱格式不正确' }]"
 				>
 					<a-input v-model:value="formState.email" placeholder="选填，邮箱地址" />
 				</a-form-item>
@@ -223,6 +223,31 @@ import { message } from 'ant-design-vue';
 import { createAppUser, deleteAppUser, fetchAppUsers, updateAppUser } from '@/api/appUser';
 import { formatDateTime } from '@/lib/format';
 
+const PHONE_PATTERN = /^$|^1\d{10}$/;
+const EMAIL_PATTERN = /^$|^[\w.-]+@[\w.-]+\.[A-Za-z]{2,}$/;
+const DEFAULT_FORM_STATE = {
+	username: '',
+	password: '',
+	nickname: '',
+	phone: '',
+	email: '',
+	status: 1
+};
+
+function createDefaultFormState() {
+	return { ...DEFAULT_FORM_STATE };
+}
+
+function normalizeFormPayload() {
+	return {
+		password: formState.password,
+		nickname: formState.nickname.trim(),
+		phone: formState.phone.trim(),
+		email: formState.email.trim(),
+		status: formState.status
+	};
+}
+
 const loading = ref(false);
 const submitLoading = ref(false);
 const users = ref([]);
@@ -232,14 +257,7 @@ const modalMode = ref('create');
 const currentId = ref(null);
 const formRef = ref();
 
-const formState = reactive({
-	username: '',
-	password: '',
-	nickname: '',
-	phone: '',
-	email: '',
-	status: 1
-});
+const formState = reactive(createDefaultFormState());
 
 const columns = [
 	{
@@ -360,11 +378,13 @@ function openEditModal(record) {
 	modalMode.value = 'edit';
 	currentId.value = record.id;
 	resetForm();
-	formState.username = record.username;
-	formState.nickname = record.nickname;
-	formState.phone = record.phone || '';
-	formState.email = record.email || '';
-	formState.status = record.status;
+	Object.assign(formState, {
+		username: record.username,
+		nickname: record.nickname,
+		phone: record.phone || '',
+		email: record.email || '',
+		status: record.status
+	});
 	modalOpen.value = true;
 }
 
@@ -403,31 +423,46 @@ async function handleDelete(record) {
 function buildCreatePayload() {
 	return {
 		username: formState.username.trim(),
-		password: formState.password,
-		nickname: formState.nickname.trim(),
-		phone: formState.phone.trim(),
-		email: formState.email.trim(),
-		status: formState.status
+		...normalizeFormPayload()
 	};
 }
 
 function buildUpdatePayload() {
-	return {
-		password: formState.password,
-		nickname: formState.nickname.trim(),
-		phone: formState.phone.trim(),
-		email: formState.email.trim(),
-		status: formState.status
-	};
+	return normalizeFormPayload();
 }
 
 function resetForm() {
 	formRef.value?.resetFields();
-	formState.username = '';
-	formState.password = '';
-	formState.nickname = '';
-	formState.phone = '';
-	formState.email = '';
-	formState.status = 1;
+	Object.assign(formState, createDefaultFormState());
 }
 </script>
+
+<style scoped>
+@import '@/styles/ops-surface.css';
+
+.toolbar-panel {
+	background: linear-gradient(135deg, #0c2037, #123c67 52%, #0f766e 100%);
+}
+
+.metrics-grid {
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.status-tag {
+	border-radius: 999px;
+	padding-inline: 10px;
+}
+
+.surface-card :deep(.ant-card-body) {
+	padding: 16px 20px;
+}
+
+.user-modal-wrap :deep(.ant-modal-content) {
+	border-radius: 24px;
+	overflow: hidden;
+}
+
+.user-modal-wrap :deep(.ant-modal-header) {
+	border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+}
+</style>
