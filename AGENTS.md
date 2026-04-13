@@ -32,9 +32,11 @@ No automated frontend test suite is configured currently; include a manual smoke
 Current history uses short messages (examples: `初始化模版`, `first commit`). Keep commits concise and imperative; prefer `<area>: <summary>` when possible (example: `backend: add hello endpoint validation`).
 
 ## Agent Commit Workflow
+- In this repository environment, if local read commands are likely to fail under sandbox restrictions, request escalation on the first necessary command instead of retrying without escalation.
 - After completing requested code changes and any relevant verification, automatically run `git add` and `git commit` for the current task without waiting for a separate confirmation.
 - Commit only files related to the current task. Do not include unrelated changes, generated files, or user edits that were not part of the request.
 - If the working tree already contains user changes or unexpected modifications that are not clearly part of the current task, stop and ask before committing.
+- Commit messages must be written in Chinese.
 - Use concise imperative commit messages, preferably in the format `<area>: <summary>`.
 
 For PRs, include:
