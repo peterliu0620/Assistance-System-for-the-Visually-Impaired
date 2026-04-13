@@ -236,11 +236,14 @@
 			</view>
 			<text class="debug-log" v-for="(log, idx) in debug.logs" :key="idx">{{ log }}</text>
 		</view>
+
+		<app-tab-bar current="home" />
 	</view>
 </template>
 
 <script>
 	import { loadUserSettings } from '../../utils/user-settings.js'
+	import AppTabBar from '../../components/app-tab-bar.vue'
 
 	const TRACK_INTERVAL_MS = 1200
 
@@ -268,6 +271,9 @@
 	}
 
 	export default {
+		components: {
+			AppTabBar
+		},
 		data() {
 			return {
 				loading: false,
@@ -1111,13 +1117,23 @@
 				})
 			},
 			goUserCenter() {
-				uni.navigateTo({
-					url: '/pages/user-center/user-center'
+				uni.redirectTo({
+					url: '/pages/user-center/user-center',
+					fail: () => {
+						uni.reLaunch({
+							url: '/pages/user-center/user-center'
+						})
+					}
 				})
 			},
 			goKnowledge() {
-				uni.navigateTo({
-					url: '/pages/knowledge/knowledge'
+				uni.redirectTo({
+					url: '/pages/knowledge/knowledge',
+					fail: () => {
+						uni.reLaunch({
+							url: '/pages/knowledge/knowledge'
+						})
+					}
 				})
 			}
 		}

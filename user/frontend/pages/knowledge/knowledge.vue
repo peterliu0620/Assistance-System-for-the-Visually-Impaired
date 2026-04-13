@@ -105,13 +105,19 @@
 				</view>
 			</view>
 		</view>
+
+		<app-tab-bar current="knowledge" />
 	</view>
 </template>
 
 <script>
 	import { loadUserSettings } from '../../utils/user-settings.js'
+	import AppTabBar from '../../components/app-tab-bar.vue'
 
 	export default {
+		components: {
+			AppTabBar
+		},
 		data() {
 			return {
 				settings: loadUserSettings(),
@@ -220,7 +226,8 @@
 				})
 			},
 			goHome() {
-				uni.navigateBack({
+				uni.redirectTo({
+					url: '/pages/index/index',
 					fail: () => {
 						uni.reLaunch({ url: '/pages/index/index' })
 					}

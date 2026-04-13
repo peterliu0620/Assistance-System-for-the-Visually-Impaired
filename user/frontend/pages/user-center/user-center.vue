@@ -144,13 +144,19 @@
 				<button class="action-btn ghost" @click="backToHome">返回识别页</button>
 			</view>
 		</view>
+
+		<app-tab-bar current="profile" />
 	</view>
 </template>
 
 <script>
 	import { loadUserSettings, saveUserSettings } from '../../utils/user-settings.js'
+	import AppTabBar from '../../components/app-tab-bar.vue'
 
 	export default {
+		components: {
+			AppTabBar
+		},
 		data() {
 			return {
 				voiceOptions: [
@@ -251,12 +257,18 @@
 				uni.showToast({ title: '设置已保存', icon: 'success' })
 			},
 			goKnowledge() {
-				uni.navigateTo({
-					url: '/pages/knowledge/knowledge'
+				uni.redirectTo({
+					url: '/pages/knowledge/knowledge',
+					fail: () => {
+						uni.reLaunch({
+							url: '/pages/knowledge/knowledge'
+						})
+					}
 				})
 			},
 			backToHome() {
-				uni.navigateBack({
+				uni.redirectTo({
+					url: '/pages/index/index',
 					fail: () => {
 						uni.reLaunch({ url: '/pages/index/index' })
 					}
