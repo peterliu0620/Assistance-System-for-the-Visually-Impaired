@@ -162,20 +162,39 @@
 	</div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { getAdminProfile } from '@/lib/auth';
 
+interface DashboardStats {
+	adminName: string;
+}
+
+interface HighlightItem {
+	index: string;
+	title: string;
+	description: string;
+	tag: string;
+	color: string;
+}
+
+interface ShortcutItem {
+	title: string;
+	description: string;
+	path: string;
+	tag: string;
+	color: string;
+}
+
 const router = useRouter();
 const loading = ref(false);
 const profile = getAdminProfile();
-const stats = reactive({
-	adminName: 'admin',
-	defaultPassword: '123456'
+const stats = reactive<DashboardStats>({
+	adminName: 'admin'
 });
 
-const highlights = [
+const highlights: HighlightItem[] = [
 	{
 		index: '01',
 		title: 'App 用户统一管理',
@@ -199,7 +218,7 @@ const highlights = [
 	}
 ];
 
-const shortcuts = [
+const shortcuts: ShortcutItem[] = [
 	{
 		title: '进入 App 用户',
 		description: '集中维护登录用户与账号状态。',
@@ -239,11 +258,10 @@ onMounted(() => {
 async function loadDashboard() {
 	loading.value = true;
 	stats.adminName = profile?.username || 'admin';
-	stats.defaultPassword = '123456';
 	loading.value = false;
 }
 
-function goTo(path) {
+function goTo(path: string) {
 	router.push(path);
 }
 </script>

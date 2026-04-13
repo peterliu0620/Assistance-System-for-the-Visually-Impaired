@@ -1,15 +1,17 @@
+import type { AdminProfile, AuthSessionPayload } from '@/types/models';
+
 const TOKEN_KEY = 'admin_token';
 const PROFILE_KEY = 'admin_profile';
 
-export function getAuthToken() {
+export function getAuthToken(): string {
   return localStorage.getItem(TOKEN_KEY) || '';
 }
 
-export function hasAuthToken() {
+export function hasAuthToken(): boolean {
   return Boolean(getAuthToken());
 }
 
-export function getAdminProfile() {
+export function getAdminProfile(): AdminProfile | null {
   const raw = localStorage.getItem(PROFILE_KEY);
 
   if (!raw) {
@@ -17,14 +19,14 @@ export function getAdminProfile() {
   }
 
   try {
-    return JSON.parse(raw);
+    return JSON.parse(raw) as AdminProfile;
   } catch (error) {
     clearAuth();
     return null;
   }
 }
 
-export function setAuthSession(payload) {
+export function setAuthSession(payload: AuthSessionPayload): void {
   localStorage.setItem(TOKEN_KEY, payload.token);
   localStorage.setItem(
     PROFILE_KEY,
@@ -36,7 +38,7 @@ export function setAuthSession(payload) {
   );
 }
 
-export function clearAuth() {
+export function clearAuth(): void {
   localStorage.removeItem(TOKEN_KEY);
   localStorage.removeItem(PROFILE_KEY);
 }

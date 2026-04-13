@@ -101,20 +101,30 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue';
-import { message } from 'ant-design-vue';
+import { message, type TableColumnsType } from 'ant-design-vue';
+import type { FormInstance } from 'ant-design-vue/es/form';
 import { createFamilyBinding, fetchFamilyBindings } from '@/api/familySafety';
 import { formatDateTime } from '@/lib/format';
+import type { FamilyBinding, FamilyBindingPayload } from '@/types/models';
+
+interface FamilyBindingFormState {
+  userId: number | null;
+  familyName: string;
+  familyPhone: string;
+  familyEmail: string;
+  relationship: string;
+}
 
 const loading = ref(false);
 const submitLoading = ref(false);
 const modalOpen = ref(false);
-const bindings = ref([]);
+const bindings = ref<FamilyBinding[]>([]);
 const keyword = ref('');
-const formRef = ref();
+const formRef = ref<FormInstance>();
 
-const formState = reactive({
+const formState = reactive<FamilyBindingFormState>({
   userId: null,
   familyName: '',
   familyPhone: '',
@@ -122,7 +132,7 @@ const formState = reactive({
   relationship: ''
 });
 
-const columns = [
+const columns: TableColumnsType<FamilyBinding> = [
   { title: '家属', dataIndex: 'familyName', key: 'familyName' },
   { title: '绑定用户', key: 'user' },
   { title: '关系', dataIndex: 'relationship', key: 'relationship' },
@@ -139,6 +149,8 @@ async function loadBindings() {
   loading.value = true;
   try {
     bindings.value = await fetchFamilyBindings(keyword.value.trim());
+  } catch (error) {
+    message.error(error instanceof Error ? error.message : '加载绑定失败');
   } finally {
     loading.value = false;
   }
@@ -149,14 +161,16 @@ function openCreateModal() {
 }
 
 async function handleSubmit() {
-  await formRef.value?.validate();
-  submitLoading.value = true;
   try {
-    await createFamilyBinding({ ...formState, status: 'ACTIVE' });
+    await formRef.value?.validate();
+    submitLoading.value = true;
+    await createFamilyBinding(buildPayload());
     message.success('绑定已创建');
     modalOpen.value = false;
     resetForm();
-    loadBindings();
+    await loadBindings();
+  } catch (error) {
+    message.error(error instanceof Error ? error.message : '创建绑定失败');
   } finally {
     submitLoading.value = false;
   }
@@ -176,6 +190,17 @@ function resetForm() {
     relationship: ''
   });
   formRef.value?.clearValidate();
+}
+
+function buildPayload(): FamilyBindingPayload {
+  return {
+    userId: formState.userId as number,
+    familyName: formState.familyName.trim(),
+    familyPhone: formState.familyPhone.trim(),
+    familyEmail: formState.familyEmail.trim(),
+    relationship: formState.relationship.trim(),
+    status: 'ACTIVE'
+  };
 }
 </script>
 

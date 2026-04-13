@@ -68,9 +68,10 @@
 	</div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { reactive, ref } from 'vue';
 import { message } from 'ant-design-vue';
+import type { Rule } from 'ant-design-vue/es/form';
 import { useRoute, useRouter } from 'vue-router';
 import { login } from '@/api/auth';
 import { setAuthSession } from '@/lib/auth';
@@ -84,7 +85,7 @@ const formState = reactive({
 	password: ''
 });
 
-const rules = {
+const rules: Record<string, Rule[]> = {
 	username: [{ required: true, message: '请输入用户名' }],
 	password: [{ required: true, message: '请输入密码' }]
 };
@@ -100,9 +101,10 @@ async function handleSubmit() {
 
 		setAuthSession(data);
 		message.success(`欢迎回来，${data.nickname}`);
-		await router.replace(route.query.redirect || '/dashboard');
+		const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : '/dashboard';
+		await router.replace(redirect);
 	} catch (error) {
-		message.error(error.message);
+		message.error(error instanceof Error ? error.message : '登录失败');
 	} finally {
 		submitting.value = false;
 	}

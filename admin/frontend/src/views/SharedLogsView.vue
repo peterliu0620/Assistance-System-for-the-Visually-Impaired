@@ -80,22 +80,30 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { computed, reactive, ref } from 'vue';
-import { message } from 'ant-design-vue';
+import { message, type TableColumnsType } from 'ant-design-vue';
 import { fetchSharedLogs } from '@/api/familySafety';
 import { formatDateTime } from '@/lib/format';
+import type { SharedLog, SharedLogFilters } from '@/types/models';
+
+interface SharedLogQueryState {
+  familyMemberId: number | null;
+  userId: number | null;
+  mode?: string;
+  date?: string;
+}
 
 const loading = ref(false);
-const logs = ref([]);
-const filters = reactive({
+const logs = ref<SharedLog[]>([]);
+const filters = reactive<SharedLogQueryState>({
   familyMemberId: 1,
   userId: null,
   mode: undefined,
   date: undefined
 });
 
-const columns = [
+const columns: TableColumnsType<SharedLog> = [
   { title: '用户', key: 'user', width: 160 },
   { title: '类型', dataIndex: 'mode', key: 'mode', width: 120 },
   { title: '核心内容', key: 'coreItem', width: 230 },
@@ -118,15 +126,21 @@ async function loadLogs() {
   }
   loading.value = true;
   try {
-    logs.value = await fetchSharedLogs({
-      familyMemberId: filters.familyMemberId,
-      userId: filters.userId || undefined,
-      mode: filters.mode,
-      date: filters.date
-    });
+    logs.value = await fetchSharedLogs(buildFilters());
+  } catch (error) {
+    message.error(error instanceof Error ? error.message : '加载日志失败');
   } finally {
     loading.value = false;
   }
+}
+
+function buildFilters(): SharedLogFilters {
+  return {
+    familyMemberId: filters.familyMemberId as number,
+    userId: filters.userId || undefined,
+    mode: filters.mode,
+    date: filters.date
+  };
 }
 </script>
 

@@ -104,7 +104,7 @@
 	</a-layout>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { computed, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { DashboardOutlined, FileSearchOutlined, MedicineBoxOutlined, TeamOutlined, UserOutlined } from '@ant-design/icons-vue';

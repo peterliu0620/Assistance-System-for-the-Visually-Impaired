@@ -217,15 +217,28 @@
 	</div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue';
-import { message } from 'ant-design-vue';
+import { message, type TableColumnsType } from 'ant-design-vue';
+import type { FormInstance, Rule } from 'ant-design-vue/es/form';
 import { createAppUser, deleteAppUser, fetchAppUsers, updateAppUser } from '@/api/appUser';
 import { formatDateTime } from '@/lib/format';
+import type { AppUser, AppUserPayload } from '@/types/models';
 
 const PHONE_PATTERN = /^$|^1\d{10}$/;
 const EMAIL_PATTERN = /^$|^[\w.-]+@[\w.-]+\.[A-Za-z]{2,}$/;
-const DEFAULT_FORM_STATE = {
+type ModalMode = 'create' | 'edit';
+
+interface AppUserFormState {
+	username: string;
+	password: string;
+	nickname: string;
+	phone: string;
+	email: string;
+	status: number;
+}
+
+const DEFAULT_FORM_STATE: AppUserFormState = {
 	username: '',
 	password: '',
 	nickname: '',
@@ -234,11 +247,11 @@ const DEFAULT_FORM_STATE = {
 	status: 1
 };
 
-function createDefaultFormState() {
+function createDefaultFormState(): AppUserFormState {
 	return { ...DEFAULT_FORM_STATE };
 }
 
-function normalizeFormPayload() {
+function normalizeFormPayload(): AppUserPayload {
 	return {
 		password: formState.password,
 		nickname: formState.nickname.trim(),
@@ -250,16 +263,16 @@ function normalizeFormPayload() {
 
 const loading = ref(false);
 const submitLoading = ref(false);
-const users = ref([]);
+const users = ref<AppUser[]>([]);
 const keyword = ref('');
 const modalOpen = ref(false);
-const modalMode = ref('create');
-const currentId = ref(null);
-const formRef = ref();
+const modalMode = ref<ModalMode>('create');
+const currentId = ref<number | null>(null);
+const formRef = ref<FormInstance>();
 
-const formState = reactive(createDefaultFormState());
+const formState = reactive<AppUserFormState>(createDefaultFormState());
 
-const columns = [
+const columns: TableColumnsType<AppUser> = [
 	{
 		title: '用户名',
 		dataIndex: 'username',
@@ -310,7 +323,7 @@ const columns = [
 	}
 ];
 
-const passwordRules = computed(() => {
+const passwordRules = computed<Rule[]>(() => {
 	if (modalMode.value === 'create') {
 		return [
 			{ required: true, message: '请输入密码' },
@@ -320,7 +333,7 @@ const passwordRules = computed(() => {
 
 	return [
 		{
-			validator: async (_rule, value) => {
+			validator: async (_rule, value?: string) => {
 				if (!value) {
 					return Promise.resolve();
 				}
@@ -357,6 +370,8 @@ async function loadUsers() {
 	loading.value = true;
 	try {
 		users.value = await fetchAppUsers(keyword.value.trim());
+	} catch (error) {
+		message.error(error instanceof Error ? error.message : '加载用户失败');
 	} finally {
 		loading.value = false;
 	}
@@ -374,7 +389,7 @@ function openCreateModal() {
 	modalOpen.value = true;
 }
 
-function openEditModal(record) {
+function openEditModal(record: AppUser) {
 	modalMode.value = 'edit';
 	currentId.value = record.id;
 	resetForm();
@@ -402,36 +417,42 @@ async function handleSubmit() {
 			await createAppUser(buildCreatePayload());
 			message.success('用户创建成功');
 		} else {
-			await updateAppUser(currentId.value, buildUpdatePayload());
+			await updateAppUser(currentId.value as number, buildUpdatePayload());
 			message.success('用户更新成功');
 		}
 
 		modalOpen.value = false;
 		resetForm();
 		await loadUsers();
+	} catch (error) {
+		message.error(error instanceof Error ? error.message : '保存用户失败');
 	} finally {
 		submitLoading.value = false;
 	}
 }
 
-async function handleDelete(record) {
-	await deleteAppUser(record.id);
-	message.success(`已删除用户 ${record.username}`);
-	await loadUsers();
+async function handleDelete(record: AppUser) {
+	try {
+		await deleteAppUser(record.id);
+		message.success(`已删除用户 ${record.username}`);
+		await loadUsers();
+	} catch (error) {
+		message.error(error instanceof Error ? error.message : '删除用户失败');
+	}
 }
 
-function buildCreatePayload() {
+function buildCreatePayload(): AppUserPayload {
 	return {
 		username: formState.username.trim(),
 		...normalizeFormPayload()
 	};
 }
 
-function buildUpdatePayload() {
+function buildUpdatePayload(): AppUserPayload {
 	return normalizeFormPayload();
 }
 
-function resetForm() {
+function resetForm(): void {
 	formRef.value?.resetFields();
 	Object.assign(formState, createDefaultFormState());
 }

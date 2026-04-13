@@ -111,21 +111,38 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue';
-import { message } from 'ant-design-vue';
+import { message, type TableColumnsType } from 'ant-design-vue';
+import type { FormInstance } from 'ant-design-vue/es/form';
 import { createMedicineProfile, deleteMedicineProfile, fetchMedicineProfiles, updateMedicineProfile } from '@/api/familySafety';
+import type { MedicineProfile, MedicineProfilePayload } from '@/types/models';
+
+type ModalMode = 'create' | 'edit';
+
+interface MedicineProfileFormState {
+  userId: number | null;
+  familyMemberId: number | null;
+  medicineName: string;
+  genericName: string;
+  description: string;
+  dosageUsage: string;
+  suitablePeople: string;
+  contraindications: string;
+  expiryDate?: string;
+  barcodeOrAlias: string;
+}
 
 const loading = ref(false);
 const submitLoading = ref(false);
 const modalOpen = ref(false);
-const modalMode = ref('create');
-const currentId = ref(null);
+const modalMode = ref<ModalMode>('create');
+const currentId = ref<number | null>(null);
 const keyword = ref('');
-const profiles = ref([]);
-const formRef = ref();
+const profiles = ref<MedicineProfile[]>([]);
+const formRef = ref<FormInstance>();
 
-const formState = reactive({
+const formState = reactive<MedicineProfileFormState>({
   userId: null,
   familyMemberId: null,
   medicineName: '',
@@ -138,7 +155,7 @@ const formState = reactive({
   barcodeOrAlias: ''
 });
 
-const columns = [
+const columns: TableColumnsType<MedicineProfile> = [
   { title: '药品', key: 'medicineName', width: 180 },
   { title: '所属用户', key: 'user', width: 160 },
   { title: '用法用量', dataIndex: 'dosageUsage', key: 'dosageUsage', width: 220 },
@@ -155,6 +172,8 @@ async function loadProfiles() {
   loading.value = true;
   try {
     profiles.value = await fetchMedicineProfiles({ keyword: keyword.value.trim() || undefined });
+  } catch (error) {
+    message.error(error instanceof Error ? error.message : '加载药品档案失败');
   } finally {
     loading.value = false;
   }
@@ -172,48 +191,55 @@ function openCreateModal() {
   modalOpen.value = true;
 }
 
-function openEditModal(record) {
+function openEditModal(record: MedicineProfile) {
   modalMode.value = 'edit';
   currentId.value = record.id;
+  resetForm();
   Object.assign(formState, {
     userId: record.userId,
-    familyMemberId: record.familyMemberId,
+    familyMemberId: record.familyMemberId ?? null,
     medicineName: record.medicineName,
-    genericName: record.genericName,
-    description: record.description,
-    dosageUsage: record.dosageUsage,
-    suitablePeople: record.suitablePeople,
-    contraindications: record.contraindications,
-    expiryDate: record.expiryDate,
-    barcodeOrAlias: record.barcodeOrAlias
+    genericName: record.genericName || '',
+    description: record.description || '',
+    dosageUsage: record.dosageUsage || '',
+    suitablePeople: record.suitablePeople || '',
+    contraindications: record.contraindications || '',
+    expiryDate: record.expiryDate || undefined,
+    barcodeOrAlias: record.barcodeOrAlias || ''
   });
   modalOpen.value = true;
 }
 
 async function handleSubmit() {
-  await formRef.value?.validate();
-  submitLoading.value = true;
   try {
-    const payload = { ...formState };
+    await formRef.value?.validate();
+    submitLoading.value = true;
+    const payload = buildPayload();
     if (modalMode.value === 'create') {
       await createMedicineProfile(payload);
       message.success('药品档案已创建');
     } else {
-      await updateMedicineProfile(currentId.value, payload);
+      await updateMedicineProfile(currentId.value as number, payload);
       message.success('药品档案已更新');
     }
     modalOpen.value = false;
     resetForm();
-    loadProfiles();
+    await loadProfiles();
+  } catch (error) {
+    message.error(error instanceof Error ? error.message : '保存药品档案失败');
   } finally {
     submitLoading.value = false;
   }
 }
 
-async function handleDelete(record) {
-  await deleteMedicineProfile(record.id);
-  message.success('药品档案已删除');
-  loadProfiles();
+async function handleDelete(record: MedicineProfile) {
+  try {
+    await deleteMedicineProfile(record.id);
+    message.success('药品档案已删除');
+    await loadProfiles();
+  } catch (error) {
+    message.error(error instanceof Error ? error.message : '删除药品档案失败');
+  }
 }
 
 function handleCancel() {
@@ -237,7 +263,22 @@ function resetForm() {
   formRef.value?.clearValidate();
 }
 
-function isExpired(date) {
+function buildPayload(): MedicineProfilePayload {
+  return {
+    userId: formState.userId as number,
+    familyMemberId: formState.familyMemberId,
+    medicineName: formState.medicineName.trim(),
+    genericName: formState.genericName.trim(),
+    description: formState.description.trim(),
+    dosageUsage: formState.dosageUsage.trim(),
+    suitablePeople: formState.suitablePeople.trim(),
+    contraindications: formState.contraindications.trim(),
+    expiryDate: formState.expiryDate,
+    barcodeOrAlias: formState.barcodeOrAlias.trim()
+  };
+}
+
+function isExpired(date?: string): boolean {
   return !!date && new Date(date).getTime() < Date.now() - 24 * 60 * 60 * 1000;
 }
 </script>
