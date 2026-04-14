@@ -34,6 +34,7 @@ No automated frontend test suite is configured currently; include a manual smoke
 Current history uses short messages (examples: `初始化模版`, `first commit`). Keep commits concise and imperative; prefer `<area>: <summary>` when possible (example: `backend: add hello endpoint validation`).
 
 ## Agent Commit Workflow
+- After each completed file modification task, automatically create a commit for that task unless the user explicitly asks not to commit.
 - In this repository environment, if local read commands are likely to fail under sandbox restrictions, request escalation on the first necessary command instead of retrying without escalation.
 - After completing requested code changes and any relevant verification, automatically run `git add` and `git commit` for the current task without waiting for a separate confirmation.
 - Commit only files related to the current task. Do not include unrelated changes, generated files, or user edits that were not part of the request.
