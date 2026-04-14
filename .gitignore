@@ -60,3 +60,4 @@ user/backend/src/main/resources/application.properties
 
 # Local frontend API config
 user/frontend/utils/api.ts
+issue.md
