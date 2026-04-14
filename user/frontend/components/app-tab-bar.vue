@@ -15,8 +15,17 @@
 	</view>
 </template>
 
-<script>
-	export default {
+<script lang="ts">
+	import Vue from 'vue';
+
+	interface TabBarItem {
+		key: string;
+		label: string;
+		icon: string;
+		url: string;
+	}
+
+	export default Vue.extend({
 		props: {
 			current: {
 				type: String,
@@ -29,11 +38,11 @@
 					{ key: 'home', label: '识别', icon: '◎', url: '/pages/index/index' },
 					{ key: 'knowledge', label: '知识库', icon: '◌', url: '/pages/knowledge/knowledge' },
 					{ key: 'profile', label: '我的', icon: '◐', url: '/pages/user-center/user-center' }
-				]
+				] as TabBarItem[]
 			}
 		},
 		methods: {
-			switchTo(item) {
+			switchTo(item: TabBarItem) {
 				if (!item || item.key === this.current) {
 					return
 				}
@@ -47,7 +56,7 @@
 				})
 			}
 		}
-	}
+	})
 </script>
 
 <style>
@@ -70,7 +79,7 @@
 		gap: 12rpx;
 		padding: 14rpx;
 		border-radius: 30rpx;
-		background: rgba(8, 14, 24, 0.9);
+		background: linear-gradient(160deg, rgba(8, 14, 24, 0.94), rgba(10, 18, 29, 0.88));
 		border: 1px solid rgba(255, 255, 255, 0.08);
 		box-shadow: 0 24rpx 60rpx rgba(0, 0, 0, 0.34);
 		backdrop-filter: blur(18rpx);
@@ -86,11 +95,13 @@
 		min-height: 88rpx;
 		border-radius: 22rpx;
 		color: rgba(244, 248, 255, 0.7);
+		transition: all 0.2s ease;
 	}
 
 	.app-tab-item-active {
-		background: linear-gradient(135deg, rgba(255, 212, 107, 0.18), rgba(135, 215, 255, 0.12));
+		background: linear-gradient(135deg, rgba(255, 212, 107, 0.22), rgba(135, 215, 255, 0.14));
 		color: #fff5d1;
+		box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
 	}
 
 	.app-tab-icon {

@@ -4,6 +4,8 @@
 	--text-main: #f4f8ff;
 	--text-soft: #a9bfd7;
 	--line-soft: rgba(153, 199, 241, 0.14);
+	--surface-strong: rgba(255, 255, 255, 0.06);
+	--surface-soft: rgba(255, 255, 255, 0.035);
 	min-height: 100vh;
 	padding: 28rpx 28rpx 196rpx;
 	position: relative;
@@ -70,6 +72,7 @@
 	width: 100%;
 	border-radius: 34rpx;
 	backdrop-filter: blur(18rpx);
+	animation: panel-rise 420ms ease both;
 }
 
 .hero-shell {
@@ -84,6 +87,18 @@
 .section-panel {
 	padding: 28rpx;
 	margin-bottom: 22rpx;
+}
+
+.section-panel::before,
+.hero-shell::before {
+	content: '';
+	position: absolute;
+	left: 28rpx;
+	right: 28rpx;
+	top: 0;
+	height: 1px;
+	background: linear-gradient(90deg, rgba(255, 255, 255, 0), var(--line-soft), rgba(255, 255, 255, 0));
+	opacity: 0.9;
 }
 
 .theme-gold .hero-shell,
@@ -171,7 +186,7 @@
 .stat-card {
 	padding: 22rpx;
 	border-radius: 24rpx;
-	background: rgba(255, 255, 255, 0.04);
+	background: var(--surface-soft);
 	border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
@@ -217,6 +232,7 @@
 	padding: 0 28rpx;
 	font-size: 28rpx;
 	margin: 0;
+	transition: transform 180ms ease, box-shadow 180ms ease, background 180ms ease;
 }
 
 .action-btn.primary,
@@ -240,6 +256,12 @@
 	border: 1px solid rgba(135, 215, 255, 0.12);
 }
 
+.action-btn:active,
+.mini-btn:active,
+.tiny:active {
+	transform: translateY(2rpx) scale(0.992);
+}
+
 .mini-btn {
 	height: 72rpx;
 	padding: 0 24rpx;
@@ -256,6 +278,18 @@
 
 .font-large .hero-title {
 	font-size: 64rpx;
+}
+
+@keyframes panel-rise {
+	from {
+		opacity: 0;
+		transform: translateY(20rpx);
+	}
+
+	to {
+		opacity: 1;
+		transform: translateY(0);
+	}
 }
 
 @media screen and (max-width: 720px) {

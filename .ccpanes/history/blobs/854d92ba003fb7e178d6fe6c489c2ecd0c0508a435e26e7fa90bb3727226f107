@@ -1,0 +1,2523 @@
+if (typeof Promise !== "undefined" && !Promise.prototype.finally) {
+  Promise.prototype.finally = function(callback) {
+    const promise = this.constructor;
+    return this.then(
+      (value) => promise.resolve(callback()).then(() => value),
+      (reason) => promise.resolve(callback()).then(() => {
+        throw reason;
+      })
+    );
+  };
+}
+;
+if (typeof uni !== "undefined" && uni && uni.requireGlobal) {
+  const global = uni.requireGlobal();
+  ArrayBuffer = global.ArrayBuffer;
+  Int8Array = global.Int8Array;
+  Uint8Array = global.Uint8Array;
+  Uint8ClampedArray = global.Uint8ClampedArray;
+  Int16Array = global.Int16Array;
+  Uint16Array = global.Uint16Array;
+  Int32Array = global.Int32Array;
+  Uint32Array = global.Uint32Array;
+  Float32Array = global.Float32Array;
+  Float64Array = global.Float64Array;
+  BigInt64Array = global.BigInt64Array;
+  BigUint64Array = global.BigUint64Array;
+}
+;
+if (uni.restoreGlobal) {
+  uni.restoreGlobal(Vue, weex, plus, setTimeout, clearTimeout, setInterval, clearInterval);
+}
+(function(vue) {
+  "use strict";
+  function formatAppLog(type, filename, ...args) {
+    if (uni.__log__) {
+      uni.__log__(type, filename, ...args);
+    } else {
+      console[type].apply(console, [...args, filename]);
+    }
+  }
+  const DEFAULT_USER_SETTINGS = {
+    speechRate: 1,
+    voiceTimbre: "Cherry",
+    broadcastGranularity: "detailed",
+    gestureSingleTap: "none",
+    gestureDoubleTap: "voice_trigger",
+    gestureLongPress: "direct_scan",
+    hapticLevel: 2,
+    contrastMode: "black-gold",
+    extraLargeText: false,
+    findModeFeedbackIntervalMs: 2600,
+    findModeAutoStopSeconds: 90
+  };
+  function loadUserSettings() {
+    const stored = uni.getStorageSync("user_settings");
+    if (!stored || typeof stored !== "object") {
+      return { ...DEFAULT_USER_SETTINGS };
+    }
+    return {
+      ...DEFAULT_USER_SETTINGS,
+      ...stored
+    };
+  }
+  function saveUserSettings(settings) {
+    const merged = {
+      ...DEFAULT_USER_SETTINGS,
+      ...settings || {}
+    };
+    uni.setStorageSync("user_settings", merged);
+    return merged;
+  }
+  const _export_sfc = (sfc, props) => {
+    const target = sfc.__vccOpts || sfc;
+    for (const [key, val] of props) {
+      target[key] = val;
+    }
+    return target;
+  };
+  const TRACK_INTERVAL_MS = 1200;
+  function createFindModeState() {
+    return {
+      mode: "idle",
+      targetName: "",
+      sessionId: "",
+      isTracking: false,
+      lastGuidanceText: "",
+      lastGuidanceAt: 0,
+      lastResponseAt: 0,
+      missCount: 0,
+      hitCount: 0,
+      frameIndex: 0,
+      proximityLevel: "",
+      guidanceText: "",
+      awaitingManualInput: false,
+      manualTargetName: "",
+      detected: false,
+      locked: false,
+      isCapturing: false,
+      autoStopAt: 0
+    };
+  }
+  const _sfc_main$4 = {
+    data() {
+      return {
+        loading: false,
+        result: null,
+        apiBase: "http://10.69.65.44:8080",
+        audioPlayer: null,
+        cameraContext: null,
+        singleTapTimer: null,
+        trackingTimer: null,
+        lastLocation: {
+          latitude: null,
+          longitude: null,
+          locationText: ""
+        },
+        knowledgeState: {
+          recentRecords: [],
+          todayScanCount: 0,
+          lastSessionId: uni.getStorageSync("knowledge_last_session_id") || "",
+          lastAnswer: "",
+          questionInput: ""
+        },
+        settings: loadUserSettings(),
+        findModeState: createFindModeState(),
+        debug: {
+          status: "idle",
+          lastCommand: "",
+          lastImagePath: "",
+          lastStatusCode: "",
+          lastError: "",
+          logs: []
+        }
+      };
+    },
+    computed: {
+      themeClass() {
+        return this.settings.contrastMode === "black-yellow" ? "theme-yellow" : "theme-gold";
+      },
+      largeFontClass() {
+        return this.settings.extraLargeText ? "font-large" : "";
+      },
+      modeLabel() {
+        if (this.findModeState.mode === "listeningTarget")
+          return "等待目标输入";
+        if (this.findModeState.mode === "tracking")
+          return "实时追踪";
+        if (this.findModeState.mode === "targetLost")
+          return "目标暂失";
+        if (this.findModeState.mode === "nearTarget")
+          return "已接近目标";
+        if (this.findModeState.mode === "completed")
+          return "可伸手拿取";
+        if (this.findModeState.mode === "error")
+          return "寻物异常";
+        return "单次识别";
+      },
+      trackingStatusText() {
+        const mode = this.findModeState.mode;
+        if (mode === "listeningTarget")
+          return "正在收集目标物";
+        if (mode === "tracking")
+          return "持续分析中";
+        if (mode === "targetLost")
+          return "目标暂时离开画面";
+        if (mode === "nearTarget")
+          return "已进入手边范围";
+        if (mode === "completed")
+          return "建议伸手拿取";
+        if (mode === "error")
+          return "已停止，请重试";
+        return "未启动";
+      },
+      proximityText() {
+        const value = this.findModeState.proximityLevel;
+        if (value === "FAR")
+          return "较远";
+        if (value === "MID")
+          return "中等";
+        if (value === "NEAR")
+          return "很近";
+        if (value === "REACHABLE")
+          return "可拿取";
+        return "未知";
+      },
+      foundStateText() {
+        if (this.findModeState.mode === "completed")
+          return "已找到";
+        if (this.findModeState.detected)
+          return "已发现目标";
+        if (this.findModeState.isTracking)
+          return "搜索中";
+        return "未开始";
+      },
+      showTrackingCamera() {
+        return this.findModeState.isTracking;
+      }
+    },
+    onLoad() {
+      this.audioPlayer = uni.createInnerAudioContext();
+      this.audioPlayer.autoplay = true;
+      this.audioPlayer.onPlay(() => {
+        this.debug.status = "spoken-cloud-playing";
+        this.pushDebugLog("云端音频开始播放");
+      });
+      this.audioPlayer.onEnded(() => {
+        this.debug.status = "spoken-cloud-ended";
+        this.pushDebugLog("云端音频播放结束");
+      });
+      this.audioPlayer.onError((err) => {
+        this.debug.status = "spoken-cloud-failed";
+        this.setDebugError(`云端音频播放失败: ${JSON.stringify(err)}`);
+      });
+      this.ensureLoggedIn();
+      this.refreshSettings();
+    },
+    onShow() {
+      this.ensureLoggedIn();
+      this.refreshSettings();
+    },
+    onUnload() {
+      if (this.audioPlayer) {
+        this.audioPlayer.destroy();
+        this.audioPlayer = null;
+      }
+      if (this.singleTapTimer) {
+        clearTimeout(this.singleTapTimer);
+        this.singleTapTimer = null;
+      }
+      this.clearTrackingTimer();
+      this.cameraContext = null;
+    },
+    methods: {
+      refreshSettings() {
+        this.settings = loadUserSettings();
+      },
+      getCurrentUser() {
+        return uni.getStorageSync("auth_user") || {};
+      },
+      getCurrentUserId() {
+        const user = this.getCurrentUser();
+        return user && user.id ? user.id : null;
+      },
+      ensureLoggedIn() {
+        const user = this.getCurrentUser();
+        if (!user || !user.id) {
+          uni.reLaunch({
+            url: "/pages/auth/auth"
+          });
+          return false;
+        }
+        return true;
+      },
+      gestureActionLabel(action) {
+        if (action === "voice_trigger")
+          return "语音触发识别";
+        if (action === "direct_scan")
+          return "直接拍照识别";
+        if (action === "open_user_center")
+          return "打开用户中心";
+        return "无动作";
+      },
+      onGestureTap() {
+        if (this.singleTapTimer) {
+          clearTimeout(this.singleTapTimer);
+          this.singleTapTimer = null;
+          this.executeGestureAction(this.settings.gestureDoubleTap);
+          return;
+        }
+        this.singleTapTimer = setTimeout(() => {
+          this.executeGestureAction(this.settings.gestureSingleTap);
+          this.singleTapTimer = null;
+        }, 260);
+      },
+      onGestureLongPress() {
+        if (this.singleTapTimer) {
+          clearTimeout(this.singleTapTimer);
+          this.singleTapTimer = null;
+        }
+        this.executeGestureAction(this.settings.gestureLongPress);
+      },
+      executeGestureAction(action) {
+        if (!this.ensureLoggedIn()) {
+          return;
+        }
+        this.triggerHaptic();
+        if (action === "voice_trigger") {
+          this.startVoiceTrigger();
+          return;
+        }
+        if (action === "direct_scan") {
+          this.scanByDefaultCommand();
+          return;
+        }
+        if (action === "open_user_center") {
+          this.goUserCenter();
+          return;
+        }
+        this.pushDebugLog("手势动作：无操作");
+      },
+      triggerHaptic() {
+        if (this.settings.hapticLevel === 1) {
+          uni.vibrateShort();
+          return;
+        }
+        if (this.settings.hapticLevel === 2) {
+          uni.vibrateShort();
+          setTimeout(() => uni.vibrateShort(), 180);
+          return;
+        }
+        uni.vibrateLong();
+      },
+      performSuggestedHaptic(type) {
+        if (type === "LONG") {
+          uni.vibrateLong();
+          return;
+        }
+        if (type === "DOUBLE_SHORT") {
+          uni.vibrateShort();
+          setTimeout(() => uni.vibrateShort(), 180);
+          return;
+        }
+        uni.vibrateShort();
+      },
+      triggerStrongWarningHaptic() {
+        uni.vibrateLong();
+        setTimeout(() => uni.vibrateLong(), 500);
+        setTimeout(() => uni.vibrateLong(), 1100);
+      },
+      pushDebugLog(message) {
+        const now = /* @__PURE__ */ new Date();
+        const time = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}:${String(now.getSeconds()).padStart(2, "0")}`;
+        const line = `[${time}] ${message}`;
+        this.debug.logs.unshift(line);
+        formatAppLog("log", "at pages/index/index.vue:481", `[VISION-DEBUG] ${line}`);
+        if (this.debug.logs.length > 12) {
+          this.debug.logs.pop();
+        }
+      },
+      setDebugError(message) {
+        this.debug.lastError = message;
+        formatAppLog("error", "at pages/index/index.vue:488", `[VISION-DEBUG][ERROR] ${message}`);
+        this.pushDebugLog(`ERROR: ${message}`);
+      },
+      clearDebugLogs() {
+        this.debug.logs = [];
+        this.debug.lastError = "";
+        this.pushDebugLog("已清空调试日志");
+      },
+      collectLocation() {
+        return new Promise((resolve) => {
+          uni.getLocation({
+            type: "wgs84",
+            success: (res) => {
+              const location = {
+                latitude: typeof res.latitude === "number" ? Number(res.latitude.toFixed(6)) : null,
+                longitude: typeof res.longitude === "number" ? Number(res.longitude.toFixed(6)) : null,
+                locationText: typeof res.latitude === "number" && typeof res.longitude === "number" ? `纬度${res.latitude.toFixed(4)}，经度${res.longitude.toFixed(4)}` : ""
+              };
+              this.lastLocation = location;
+              resolve(location);
+            },
+            fail: () => {
+              resolve({
+                latitude: null,
+                longitude: null,
+                locationText: ""
+              });
+            }
+          });
+        });
+      },
+      rememberSessionId(sessionId) {
+        if (!sessionId) {
+          return;
+        }
+        this.knowledgeState.lastSessionId = sessionId;
+        uni.setStorageSync("knowledge_last_session_id", sessionId);
+      },
+      buildArchiveFormData(baseData, location) {
+        const payload = {
+          ...baseData
+        };
+        const userId = this.getCurrentUserId();
+        if (userId != null) {
+          payload.userId = String(userId);
+        }
+        if (location && location.latitude != null) {
+          payload.latitude = String(location.latitude);
+        }
+        if (location && location.longitude != null) {
+          payload.longitude = String(location.longitude);
+        }
+        if (location && location.locationText) {
+          payload.locationText = location.locationText;
+        }
+        return payload;
+      },
+      startFindMode() {
+        if (!this.ensureLoggedIn()) {
+          return;
+        }
+        if (this.findModeState.isTracking) {
+          return;
+        }
+        this.result = null;
+        this.findModeState = {
+          ...createFindModeState(),
+          mode: "listeningTarget"
+        };
+        this.debug.status = "find-mode-listening";
+        this.pushDebugLog("进入寻物模式，准备收集目标物名称");
+        this.speak("请说出你要找的物品名称，例如，帮我找钥匙。");
+        setTimeout(() => {
+          this.requestTargetByVoice();
+        }, 500);
+      },
+      requestTargetByVoice() {
+        if (typeof plus !== "undefined" && plus.speech && typeof plus.speech.startRecognize === "function") {
+          this.pushDebugLog("调用语音识别收集目标物");
+          plus.speech.startRecognize(
+            {
+              engine: "iFly"
+            },
+            (result) => {
+              const targetName = this.parseTargetName(result);
+              if (!targetName) {
+                this.pushDebugLog("语音结果为空，切换手动输入");
+                this.openManualTargetInput();
+                return;
+              }
+              this.beginTracking(targetName);
+            },
+            (err) => {
+              this.pushDebugLog(`语音识别不可用，切换手动输入: ${JSON.stringify(err)}`);
+              this.openManualTargetInput();
+            }
+          );
+          return;
+        }
+        this.openManualTargetInput();
+      },
+      openManualTargetInput() {
+        this.findModeState.mode = "listeningTarget";
+        this.findModeState.awaitingManualInput = true;
+        this.findModeState.manualTargetName = "";
+        this.debug.status = "find-mode-manual-input";
+        uni.showToast({ title: "请输入目标物名称", icon: "none" });
+      },
+      confirmManualTarget() {
+        const targetName = this.parseTargetName(this.findModeState.manualTargetName);
+        if (!targetName) {
+          uni.showToast({ title: "请输入有效目标物", icon: "none" });
+          return;
+        }
+        this.beginTracking(targetName);
+      },
+      cancelManualTarget() {
+        this.stopFindMode("idle");
+      },
+      parseTargetName(raw) {
+        const text = (raw || "").trim();
+        if (!text) {
+          return "";
+        }
+        const normalized = text.replace(/[，。！？、,.!?\s]/g, "").replace(/^帮我找/, "").replace(/^请帮我找/, "").replace(/^我要找/, "").replace(/^寻找/, "").replace(/^帮我寻找/, "").replace(/^找/, "");
+        return normalized || text;
+      },
+      beginTracking(targetName) {
+        const now = Date.now();
+        const sessionId = `find-${now}`;
+        this.findModeState = {
+          ...createFindModeState(),
+          mode: "tracking",
+          targetName,
+          sessionId,
+          isTracking: true,
+          guidanceText: `正在寻找${targetName}，请保持手机平稳并缓慢移动镜头。`,
+          autoStopAt: now + (Number(this.settings.findModeAutoStopSeconds) || 90) * 1e3
+        };
+        this.rememberSessionId(sessionId);
+        this.collectLocation().then((location) => {
+          this.lastLocation = location;
+        });
+        this.debug.status = "find-mode-tracking";
+        this.debug.lastCommand = `找${targetName}`;
+        this.pushDebugLog(`开始寻物，会话 ${this.findModeState.sessionId}，目标 ${targetName}`);
+        this.speak(`开始寻找${targetName}，请缓慢移动手机。`);
+        this.$nextTick(() => {
+          this.cameraContext = uni.createCameraContext();
+          this.scheduleNextTrackingFrame(900);
+        });
+      },
+      clearTrackingTimer() {
+        if (this.trackingTimer) {
+          clearTimeout(this.trackingTimer);
+          this.trackingTimer = null;
+        }
+      },
+      scheduleNextTrackingFrame(delay = TRACK_INTERVAL_MS) {
+        if (!this.findModeState.isTracking) {
+          return;
+        }
+        this.clearTrackingTimer();
+        this.trackingTimer = setTimeout(() => {
+          this.captureTrackingFrame();
+        }, delay);
+      },
+      captureTrackingFrame() {
+        if (!this.findModeState.isTracking || this.findModeState.isCapturing) {
+          return;
+        }
+        if (Date.now() >= this.findModeState.autoStopAt) {
+          this.stopFindMode("idle", "本轮寻物已超时，请重新开始");
+          return;
+        }
+        if (!this.cameraContext || typeof this.cameraContext.takePhoto !== "function") {
+          this.handleFindModeError("相机未就绪，请稍后重试");
+          return;
+        }
+        this.findModeState.isCapturing = true;
+        this.debug.status = "find-mode-capturing";
+        this.pushDebugLog(`开始抓取第 ${this.findModeState.frameIndex + 1} 帧`);
+        this.cameraContext.takePhoto({
+          quality: "low",
+          success: (res) => {
+            const imagePath = res.tempImagePath;
+            this.debug.lastImagePath = imagePath || "";
+            this.uploadTrackingFrame(imagePath);
+          },
+          fail: (err) => {
+            this.findModeState.isCapturing = false;
+            this.handleFindModeError(`抓取画面失败: ${JSON.stringify(err)}`);
+          }
+        });
+      },
+      uploadTrackingFrame(imagePath) {
+        const nextFrameIndex = this.findModeState.frameIndex + 1;
+        this.debug.status = "find-mode-uploading";
+        this.pushDebugLog(`上传追踪帧 ${nextFrameIndex}`);
+        uni.uploadFile({
+          url: `${this.apiBase}/api/vision/find-target`,
+          filePath: imagePath,
+          name: "image",
+          formData: this.buildArchiveFormData({
+            targetName: this.findModeState.targetName,
+            sessionId: this.findModeState.sessionId,
+            frameIndex: String(nextFrameIndex)
+          }, this.lastLocation),
+          success: (uploadRes) => {
+            this.findModeState.isCapturing = false;
+            this.debug.lastStatusCode = uploadRes.statusCode;
+            if (uploadRes.statusCode !== 200) {
+              let detail = uploadRes.data;
+              try {
+                const errorJson = JSON.parse(uploadRes.data || "{}");
+                detail = errorJson.message || JSON.stringify(errorJson);
+              } catch (e) {
+              }
+              this.handleFindModeError(`寻物请求失败: HTTP ${uploadRes.statusCode} ${detail || ""}`);
+              return;
+            }
+            let data = null;
+            try {
+              data = JSON.parse(uploadRes.data);
+            } catch (e) {
+              this.handleFindModeError(`寻物返回解析失败: ${e && e.message ? e.message : "unknown"}`);
+              return;
+            }
+            this.applyTrackingResponse(data, nextFrameIndex);
+          },
+          fail: (err) => {
+            this.findModeState.isCapturing = false;
+            this.handleFindModeError(`寻物请求异常: ${JSON.stringify(err)}`);
+          }
+        });
+      },
+      applyTrackingResponse(data, frameIndex) {
+        this.findModeState.frameIndex = frameIndex;
+        this.findModeState.lastResponseAt = Date.now();
+        this.findModeState.proximityLevel = data.proximityLevel || data.estimatedDistance || "";
+        this.findModeState.guidanceText = data.guidanceText || "请继续缓慢移动镜头。";
+        this.findModeState.detected = !!data.detected;
+        this.findModeState.locked = !!data.locked;
+        this.debug.status = "find-mode-guiding";
+        this.pushDebugLog(`追踪帧 ${frameIndex} 返回：${this.findModeState.guidanceText}`);
+        if (data.detected) {
+          this.findModeState.hitCount += 1;
+          this.findModeState.missCount = 0;
+        } else {
+          this.findModeState.missCount += 1;
+          this.findModeState.hitCount = 0;
+        }
+        if (!data.detected || this.findModeState.missCount >= 2) {
+          this.findModeState.mode = "targetLost";
+        } else if (data.proximityLevel === "REACHABLE") {
+          this.findModeState.mode = "completed";
+        } else if (data.proximityLevel === "NEAR") {
+          this.findModeState.mode = "nearTarget";
+        } else {
+          this.findModeState.mode = "tracking";
+        }
+        if (this.shouldSpeakGuidance(data.guidanceText)) {
+          this.findModeState.lastGuidanceText = data.guidanceText || "";
+          this.findModeState.lastGuidanceAt = Date.now();
+          this.speak(data.guidanceText);
+          this.performSuggestedHaptic(data.suggestedHaptic);
+        }
+        if (this.findModeState.mode === "completed") {
+          this.finishFindMode();
+          return;
+        }
+        if (this.findModeState.isTracking) {
+          this.scheduleNextTrackingFrame(TRACK_INTERVAL_MS);
+        }
+      },
+      shouldSpeakGuidance(text) {
+        const normalized = (text || "").trim();
+        if (!normalized) {
+          return false;
+        }
+        const now = Date.now();
+        const interval = Number(this.settings.findModeFeedbackIntervalMs) || 2600;
+        if (normalized !== this.findModeState.lastGuidanceText) {
+          return true;
+        }
+        return now - this.findModeState.lastGuidanceAt >= interval;
+      },
+      finishFindMode() {
+        this.clearTrackingTimer();
+        this.findModeState.isTracking = false;
+        this.findModeState.guidanceText = this.findModeState.guidanceText || `已接近${this.findModeState.targetName}，可以伸手拿取。`;
+        this.debug.status = "find-mode-completed";
+        this.pushDebugLog(`目标 ${this.findModeState.targetName} 已进入可拿取范围`);
+        this.performSuggestedHaptic("LONG");
+        uni.showToast({ title: "已自动录入个人知识库", icon: "none" });
+      },
+      stopFindMode(mode = "idle", toastMessage) {
+        this.clearTrackingTimer();
+        const targetName = this.findModeState.targetName;
+        this.findModeState = {
+          ...createFindModeState(),
+          mode
+        };
+        this.cameraContext = null;
+        if (toastMessage) {
+          uni.showToast({ title: toastMessage, icon: "none" });
+        }
+        if (targetName) {
+          this.pushDebugLog(`已停止寻物：${targetName}`);
+        }
+      },
+      handleFindModeError(message) {
+        this.findModeState.mode = "error";
+        this.findModeState.isTracking = false;
+        this.findModeState.awaitingManualInput = false;
+        this.clearTrackingTimer();
+        this.debug.status = "find-mode-error";
+        this.setDebugError(message);
+        uni.showToast({ title: "寻物失败，请重试", icon: "none" });
+        this.speak("寻物过程出现异常，请重新开始。");
+      },
+      startVoiceTrigger() {
+        if (!this.ensureLoggedIn()) {
+          return;
+        }
+        if (this.loading || this.findModeState.isTracking) {
+          return;
+        }
+        this.triggerHaptic();
+        const command = "这是什么？";
+        this.debug.status = "voice-triggered";
+        this.debug.lastCommand = command;
+        this.pushDebugLog("语音触发识别：先播报提示，再自动拍照");
+        this.playGuideThenCapture(command);
+      },
+      playGuideThenCapture(command) {
+        const guide = "即将开始识别，请将目标放入画面后拍照。";
+        let spoken = false;
+        if (typeof plus !== "undefined") {
+          if (plus.speech && typeof plus.speech.speak === "function") {
+            plus.speech.speak(guide);
+            spoken = true;
+          } else if (plus.tts && typeof plus.tts.speak === "function") {
+            plus.tts.speak(guide);
+            spoken = true;
+          }
+        } else if (typeof window !== "undefined" && window.speechSynthesis) {
+          const utterance = new SpeechSynthesisUtterance(guide);
+          utterance.lang = "zh-CN";
+          window.speechSynthesis.speak(utterance);
+          spoken = true;
+        }
+        if (!spoken) {
+          uni.showToast({ title: "即将打开相机，请拍照", icon: "none" });
+          this.pushDebugLog("本地提示音不可用，使用文字提示");
+        } else {
+          this.pushDebugLog("已播报拍照引导语");
+        }
+        setTimeout(() => {
+          this.pickAndAnalyzeImage(command);
+        }, 600);
+      },
+      handleVoiceCommand(command) {
+        const normalized = (command || "").trim();
+        if (!normalized) {
+          this.setDebugError("未识别到有效语音指令");
+          uni.showToast({ title: "未识别到指令", icon: "none" });
+          return;
+        }
+        this.debug.lastCommand = normalized;
+        this.debug.status = "command-ready";
+        this.pushDebugLog(`收到指令: ${normalized}`);
+        if (normalized.indexOf("什么") === -1 && normalized.indexOf("这") === -1) {
+          uni.showToast({ title: `当前指令：${normalized}`, icon: "none" });
+        }
+        this.pickAndAnalyzeImage(normalized);
+      },
+      scanByDefaultCommand() {
+        if (!this.ensureLoggedIn()) {
+          return;
+        }
+        if (this.findModeState.isTracking) {
+          return;
+        }
+        this.triggerHaptic();
+        this.pickAndAnalyzeImage("这是什么？");
+      },
+      pickAndAnalyzeImage(command) {
+        this.loading = true;
+        this.debug.status = "camera-opening";
+        this.pushDebugLog("打开相机拍照");
+        this.collectLocation().then((location) => {
+          this.lastLocation = location;
+          uni.chooseImage({
+            count: 1,
+            sourceType: ["camera"],
+            success: (chooseRes) => {
+              const imagePath = chooseRes.tempFilePaths[0];
+              this.debug.lastImagePath = imagePath || "";
+              this.debug.status = "image-picked";
+              this.pushDebugLog(`拍照成功: ${imagePath}`);
+              this.uploadForAnalyze(imagePath, command, location);
+            },
+            fail: () => {
+              this.loading = false;
+              this.debug.status = "camera-failed";
+              this.setDebugError("未获取到照片");
+              uni.showToast({ title: "未获取到照片", icon: "none" });
+            }
+          });
+        });
+      },
+      uploadForAnalyze(imagePath, command, location) {
+        const sessionId = `analyze-${Date.now()}`;
+        this.rememberSessionId(sessionId);
+        this.debug.status = "uploading";
+        this.pushDebugLog(`开始上传: ${this.apiBase}/api/vision/analyze`);
+        uni.uploadFile({
+          url: `${this.apiBase}/api/vision/analyze`,
+          filePath: imagePath,
+          name: "image",
+          formData: this.buildArchiveFormData({
+            command,
+            sessionId
+          }, location),
+          success: (uploadRes) => {
+            this.loading = false;
+            this.debug.lastStatusCode = uploadRes.statusCode;
+            this.pushDebugLog(`上传完成，HTTP ${uploadRes.statusCode}`);
+            if (uploadRes.statusCode !== 200) {
+              let detail = uploadRes.data;
+              try {
+                const errorJson = JSON.parse(uploadRes.data || "{}");
+                detail = errorJson.message || JSON.stringify(errorJson);
+              } catch (e) {
+              }
+              this.debug.status = "analyze-failed";
+              this.setDebugError(`识别请求失败: HTTP ${uploadRes.statusCode} ${detail || ""}`);
+              uni.showToast({ title: "识别失败，请查看调试信息", icon: "none" });
+              return;
+            }
+            let data = null;
+            try {
+              data = JSON.parse(uploadRes.data);
+            } catch (e) {
+              this.debug.status = "parse-failed";
+              this.setDebugError(`返回数据解析失败: ${e && e.message ? e.message : "unknown"}`);
+              uni.showToast({ title: "返回数据解析失败", icon: "none" });
+              return;
+            }
+            this.result = data;
+            this.debug.status = "analyzed";
+            this.pushDebugLog("返回解析成功，准备语音播报");
+            uni.showToast({ title: "已自动录入个人知识库", icon: "none" });
+            try {
+              const speakText = this.pickNarrationText(data);
+              if (data.medicineAlert && data.medicineAlert.triggered) {
+                this.triggerStrongWarningHaptic();
+                uni.showToast({ title: "检测到药品风险，请暂停服用", icon: "none", duration: 2500 });
+              }
+              this.speak(speakText);
+            } catch (e) {
+              this.debug.status = "speak-failed";
+              this.setDebugError(`语音播报失败: ${e && e.message ? e.message : "unknown"}`);
+            }
+          },
+          fail: () => {
+            this.loading = false;
+            this.debug.status = "upload-failed";
+            this.setDebugError("识别请求失败，请确认后端已启动");
+            uni.showToast({ title: "识别请求失败，请确认后端已启动", icon: "none" });
+          }
+        });
+      },
+      pickNarrationText(data) {
+        if (!data) {
+          return "识别完成";
+        }
+        const medicineText = this.buildMedicineNarration(data);
+        if (medicineText) {
+          return medicineText;
+        }
+        if (this.settings.broadcastGranularity === "concise") {
+          const firstItem = data.items && data.items.length ? data.items[0].name : "物体";
+          const scene = data.scene || "当前场景";
+          return `场景：${scene}。核心物品：${firstItem}。`;
+        }
+        return data.narration || "识别完成";
+      },
+      buildMedicineNarration(data) {
+        const summary = data && data.matchedMedicineProfileSummary;
+        if (!summary) {
+          return "";
+        }
+        const parts = [`已识别到药品：${summary.medicineName}。`];
+        if (summary.dosageUsage) {
+          parts.push(`用法用量：${summary.dosageUsage}。`);
+        }
+        if (summary.suitablePeople) {
+          parts.push(`适用人群：${summary.suitablePeople}。`);
+        }
+        if (summary.contraindications) {
+          parts.push(`禁忌提醒：${summary.contraindications}。`);
+        }
+        if (summary.expiryDate) {
+          const expired = new Date(summary.expiryDate).getTime() < Date.now() - 24 * 60 * 60 * 1e3;
+          parts.push(expired ? "当前档案显示该药品已过期。" : `有效期至：${summary.expiryDate}。`);
+        }
+        if (data.medicineAlert && data.medicineAlert.triggered && data.medicineAlert.alertMessage) {
+          parts.unshift(`${data.medicineAlert.alertMessage}。`);
+          parts.push("请暂停服用，并联系家属确认。");
+        }
+        return parts.join("");
+      },
+      speak(text) {
+        if (!text) {
+          return;
+        }
+        this.pushDebugLog(`开始播报: ${text}`);
+        if (typeof plus !== "undefined") {
+          if (plus.speech && typeof plus.speech.speak === "function") {
+            plus.speech.speak(text);
+            this.debug.status = "spoken-app";
+            this.pushDebugLog("使用 plus.speech.speak 完成播报");
+            return;
+          }
+          if (plus.tts && typeof plus.tts.speak === "function") {
+            plus.tts.speak(text);
+            this.debug.status = "spoken-app";
+            this.pushDebugLog("使用 plus.tts.speak 完成播报");
+            return;
+          }
+          this.debug.status = "spoken-cloud-request";
+          this.pushDebugLog("当前基座不支持 App TTS，切换云端 TTS");
+          this.playCloudTts(text);
+          return;
+        }
+        if (typeof window !== "undefined" && window.speechSynthesis) {
+          const utterance = new SpeechSynthesisUtterance(text);
+          utterance.lang = "zh-CN";
+          utterance.rate = this.settings.speechRate;
+          const voices = window.speechSynthesis.getVoices ? window.speechSynthesis.getVoices() : [];
+          const target = voices.find((v) => (v.name || "").toLowerCase().includes(this.settings.voiceTimbre.toLowerCase()));
+          if (target) {
+            utterance.voice = target;
+          }
+          window.speechSynthesis.speak(utterance);
+          this.debug.status = "spoken-web";
+          this.pushDebugLog("使用 Web Speech Synthesis 完成播报");
+          return;
+        }
+        this.debug.status = "spoken-cloud-request";
+        this.pushDebugLog("当前环境无本地播报能力，切换云端 TTS");
+        this.playCloudTts(text);
+      },
+      playCloudTts(text) {
+        uni.request({
+          url: `${this.apiBase}/api/voice/tts`,
+          method: "POST",
+          header: {
+            "Content-Type": "application/json"
+          },
+          data: {
+            text,
+            voice: this.settings.voiceTimbre
+          },
+          success: (res) => {
+            if (res.statusCode !== 200 || !res.data || !res.data.audioUrl) {
+              const detail = res.data && res.data.message ? res.data.message : JSON.stringify(res.data || {});
+              this.setDebugError(`云端TTS请求失败: HTTP ${res.statusCode} ${detail}`);
+              return;
+            }
+            const audioUrl = res.data.audioUrl;
+            this.pushDebugLog(`云端TTS成功，音频地址: ${audioUrl}`);
+            this.playFromUrl(audioUrl);
+          },
+          fail: (err) => {
+            this.setDebugError(`云端TTS请求异常: ${JSON.stringify(err)}`);
+          }
+        });
+      },
+      playFromUrl(url) {
+        if (!this.audioPlayer) {
+          this.audioPlayer = uni.createInnerAudioContext();
+          this.audioPlayer.autoplay = true;
+        }
+        this.debug.status = "spoken-cloud-ready";
+        this.pushDebugLog("准备播放云端音频");
+        this.audioPlayer.src = url;
+        if (typeof this.audioPlayer.playbackRate !== "undefined") {
+          this.audioPlayer.playbackRate = this.settings.speechRate;
+        }
+        this.audioPlayer.play();
+      },
+      goAuth() {
+        uni.navigateTo({
+          url: "/pages/auth/auth"
+        });
+      },
+      goUserCenter() {
+        uni.navigateTo({
+          url: "/pages/user-center/user-center"
+        });
+      },
+      goKnowledge() {
+        uni.navigateTo({
+          url: "/pages/knowledge/knowledge"
+        });
+      }
+    }
+  };
+  function _sfc_render$3(_ctx, _cache, $props, $setup, $data, $options) {
+    return vue.openBlock(), vue.createElementBlock(
+      "view",
+      {
+        class: vue.normalizeClass(["page", $options.themeClass, $options.largeFontClass])
+      },
+      [
+        vue.createElementVNode("view", { class: "page-glow glow-one" }),
+        vue.createElementVNode("view", { class: "page-glow glow-two" }),
+        vue.createElementVNode("view", { class: "page-grid" }),
+        vue.createElementVNode("view", { class: "hero-shell" }, [
+          vue.createElementVNode("view", { class: "hero-copy" }, [
+            vue.createElementVNode("view", { class: "hero-topline" }, [
+              vue.createElementVNode("text", { class: "eyebrow" }, "Vision Guide"),
+              vue.createElementVNode(
+                "view",
+                {
+                  class: vue.normalizeClass(["hero-status-pill", $data.findModeState.isTracking ? "hero-status-pill-live" : ""])
+                },
+                vue.toDisplayString($data.findModeState.isTracking ? "实时寻物已启动" : "辅助识别待命中"),
+                3
+                /* TEXT, CLASS */
+              )
+            ]),
+            vue.createElementVNode("text", { class: "hero-title" }, "把识别、寻物和安全提醒放进一个更清晰的入口"),
+            vue.createElementVNode("text", { class: "hero-desc" }, "首页优先呈现当前状态、关键反馈和主操作，让视障用户在最短路径里完成识别与导盲寻物。"),
+            vue.createElementVNode("view", { class: "hero-pills" }, [
+              vue.createElementVNode(
+                "view",
+                { class: "hero-pill hero-pill-active" },
+                "当前模式：" + vue.toDisplayString($options.modeLabel),
+                1
+                /* TEXT */
+              ),
+              vue.createElementVNode("view", { class: "hero-pill" }, "语音 + 震动反馈"),
+              vue.createElementVNode("view", { class: "hero-pill" }, "连续抽帧追踪")
+            ]),
+            vue.createElementVNode("view", { class: "hero-actions" }, [
+              vue.createElementVNode("button", {
+                class: "action-btn primary hero-primary-btn",
+                onClick: _cache[0] || (_cache[0] = (...args) => $options.startFindMode && $options.startFindMode(...args)),
+                disabled: $data.findModeState.isTracking || $data.loading
+              }, vue.toDisplayString($data.findModeState.isTracking ? "寻物进行中" : "开始寻物"), 9, ["disabled"]),
+              vue.createElementVNode("button", {
+                class: "action-btn ghost hero-secondary-btn",
+                onClick: _cache[1] || (_cache[1] = (...args) => $options.startVoiceTrigger && $options.startVoiceTrigger(...args)),
+                disabled: $data.loading || $data.findModeState.isTracking
+              }, vue.toDisplayString($data.loading ? "识别中" : "语音识别"), 9, ["disabled"])
+            ]),
+            vue.createElementVNode("view", { class: "hero-utility-links" }, [
+              vue.createElementVNode("view", {
+                class: "hero-link",
+                onClick: _cache[2] || (_cache[2] = (...args) => $options.goKnowledge && $options.goKnowledge(...args))
+              }, "进入知识库"),
+              vue.createElementVNode("view", {
+                class: "hero-link",
+                onClick: _cache[3] || (_cache[3] = (...args) => $options.goUserCenter && $options.goUserCenter(...args))
+              }, "打开用户中心")
+            ])
+          ]),
+          vue.createElementVNode("view", { class: "hero-aside" }, [
+            vue.createElementVNode("view", { class: "hero-focus-panel" }, [
+              vue.createElementVNode("text", { class: "panel-kicker" }, "实时状态"),
+              vue.createElementVNode(
+                "text",
+                { class: "focus-target" },
+                vue.toDisplayString($data.findModeState.targetName || "等待输入目标物"),
+                1
+                /* TEXT */
+              ),
+              vue.createElementVNode(
+                "text",
+                { class: "focus-meta" },
+                vue.toDisplayString($data.findModeState.guidanceText || "点击开始寻物后，系统会先收集目标物名称并进入引导。"),
+                1
+                /* TEXT */
+              )
+            ]),
+            vue.createElementVNode("view", { class: "hero-stats" }, [
+              vue.createElementVNode("view", { class: "hero-stat" }, [
+                vue.createElementVNode("text", { class: "hero-stat-label" }, "当前状态"),
+                vue.createElementVNode(
+                  "text",
+                  { class: "hero-stat-value" },
+                  vue.toDisplayString($options.trackingStatusText),
+                  1
+                  /* TEXT */
+                )
+              ]),
+              vue.createElementVNode("view", { class: "hero-stat" }, [
+                vue.createElementVNode("text", { class: "hero-stat-label" }, "接近程度"),
+                vue.createElementVNode(
+                  "text",
+                  { class: "hero-stat-value" },
+                  vue.toDisplayString($options.proximityText),
+                  1
+                  /* TEXT */
+                )
+              ]),
+              vue.createElementVNode("view", { class: "hero-stat" }, [
+                vue.createElementVNode("text", { class: "hero-stat-label" }, "最近会话"),
+                vue.createElementVNode(
+                  "text",
+                  { class: "hero-stat-value hero-stat-value-small" },
+                  vue.toDisplayString($data.knowledgeState.lastSessionId || "尚未生成"),
+                  1
+                  /* TEXT */
+                )
+              ]),
+              vue.createElementVNode("view", { class: "hero-stat" }, [
+                vue.createElementVNode("text", { class: "hero-stat-label" }, "反馈方式"),
+                vue.createElementVNode("text", { class: "hero-stat-value" }, "语音 + 震动")
+              ])
+            ])
+          ])
+        ]),
+        vue.createElementVNode(
+          "view",
+          {
+            class: "section-panel gesture-panel",
+            onClick: _cache[4] || (_cache[4] = (...args) => $options.onGestureTap && $options.onGestureTap(...args)),
+            onLongpress: _cache[5] || (_cache[5] = (...args) => $options.onGestureLongPress && $options.onGestureLongPress(...args))
+          },
+          [
+            vue.createElementVNode("view", { class: "section-head" }, [
+              vue.createElementVNode("view", null, [
+                vue.createElementVNode("text", { class: "section-kicker" }, "辅助交互"),
+                vue.createElementVNode("text", { class: "section-title" }, "无障碍手势操作")
+              ]),
+              vue.createElementVNode("text", { class: "section-tag" }, "点击区域即可触发")
+            ]),
+            vue.createElementVNode("view", { class: "gesture-grid" }, [
+              vue.createElementVNode("view", { class: "gesture-item" }, [
+                vue.createElementVNode("text", { class: "gesture-item-label" }, "单击"),
+                vue.createElementVNode(
+                  "text",
+                  { class: "gesture-item-value" },
+                  vue.toDisplayString($options.gestureActionLabel($data.settings.gestureSingleTap)),
+                  1
+                  /* TEXT */
+                )
+              ]),
+              vue.createElementVNode("view", { class: "gesture-item" }, [
+                vue.createElementVNode("text", { class: "gesture-item-label" }, "双击"),
+                vue.createElementVNode(
+                  "text",
+                  { class: "gesture-item-value" },
+                  vue.toDisplayString($options.gestureActionLabel($data.settings.gestureDoubleTap)),
+                  1
+                  /* TEXT */
+                )
+              ]),
+              vue.createElementVNode("view", { class: "gesture-item" }, [
+                vue.createElementVNode("text", { class: "gesture-item-label" }, "长按"),
+                vue.createElementVNode(
+                  "text",
+                  { class: "gesture-item-value" },
+                  vue.toDisplayString($options.gestureActionLabel($data.settings.gestureLongPress)),
+                  1
+                  /* TEXT */
+                )
+              ])
+            ])
+          ],
+          32
+          /* NEED_HYDRATION */
+        ),
+        vue.createElementVNode("view", { class: "section-panel tracking-panel" }, [
+          vue.createElementVNode("view", { class: "section-head" }, [
+            vue.createElementVNode("view", null, [
+              vue.createElementVNode("text", { class: "section-kicker" }, "核心工作区"),
+              vue.createElementVNode("text", { class: "section-title" }, "AI 实时导盲寻物")
+            ]),
+            vue.createElementVNode(
+              "text",
+              {
+                class: vue.normalizeClass(["section-tag", $data.findModeState.isTracking ? "section-tag-live" : ""])
+              },
+              vue.toDisplayString($data.findModeState.isTracking ? "追踪中" : "待启动"),
+              3
+              /* TEXT, CLASS */
+            )
+          ]),
+          vue.createElementVNode("text", { class: "section-desc" }, "说出目标物后，系统会持续分析镜头、更新方位，并通过语音与震动给出接近提示。"),
+          vue.createElementVNode("view", { class: "tracking-summary-grid" }, [
+            vue.createElementVNode("view", { class: "summary-block strong" }, [
+              vue.createElementVNode("text", { class: "summary-label" }, "正在寻找"),
+              vue.createElementVNode(
+                "text",
+                { class: "summary-value" },
+                vue.toDisplayString($data.findModeState.targetName || "未设置目标"),
+                1
+                /* TEXT */
+              )
+            ]),
+            vue.createElementVNode("view", { class: "summary-block" }, [
+              vue.createElementVNode("text", { class: "summary-label" }, "当前状态"),
+              vue.createElementVNode(
+                "text",
+                { class: "summary-value" },
+                vue.toDisplayString($options.trackingStatusText),
+                1
+                /* TEXT */
+              )
+            ]),
+            vue.createElementVNode("view", { class: "summary-block" }, [
+              vue.createElementVNode("text", { class: "summary-label" }, "接近程度"),
+              vue.createElementVNode(
+                "text",
+                { class: "summary-value" },
+                vue.toDisplayString($options.proximityText),
+                1
+                /* TEXT */
+              )
+            ]),
+            vue.createElementVNode("view", { class: "summary-block" }, [
+              vue.createElementVNode("text", { class: "summary-label" }, "是否找到"),
+              vue.createElementVNode(
+                "text",
+                { class: "summary-value" },
+                vue.toDisplayString($options.foundStateText),
+                1
+                /* TEXT */
+              )
+            ])
+          ]),
+          vue.createElementVNode("view", { class: "guidance-panel" }, [
+            vue.createElementVNode("text", { class: "panel-kicker" }, "实时引导"),
+            vue.createElementVNode(
+              "text",
+              { class: "guidance-text" },
+              vue.toDisplayString($data.findModeState.guidanceText || "开始寻物后，系统会先收集目标物名称，再持续播报方向和距离变化。"),
+              1
+              /* TEXT */
+            ),
+            vue.createElementVNode(
+              "text",
+              { class: "guidance-meta" },
+              "会话 " + vue.toDisplayString($data.findModeState.sessionId || "-") + " · 命中 " + vue.toDisplayString($data.findModeState.hitCount) + " 次 · 丢失 " + vue.toDisplayString($data.findModeState.missCount) + " 次",
+              1
+              /* TEXT */
+            ),
+            vue.createElementVNode("view", { class: "guidance-chip-row" }, [
+              vue.createElementVNode(
+                "view",
+                { class: "guidance-chip" },
+                vue.toDisplayString($data.findModeState.detected ? "已发现目标" : "正在搜索"),
+                1
+                /* TEXT */
+              ),
+              vue.createElementVNode(
+                "view",
+                { class: "guidance-chip" },
+                vue.toDisplayString($data.findModeState.locked ? "目标已锁定" : "等待锁定"),
+                1
+                /* TEXT */
+              ),
+              vue.createElementVNode(
+                "view",
+                { class: "guidance-chip" },
+                vue.toDisplayString($options.proximityText),
+                1
+                /* TEXT */
+              )
+            ])
+          ]),
+          $data.findModeState.awaitingManualInput ? (vue.openBlock(), vue.createElementBlock("view", {
+            key: 0,
+            class: "manual-input-panel"
+          }, [
+            vue.createElementVNode("text", { class: "manual-title" }, "语音输入不可用，请手动输入目标物"),
+            vue.withDirectives(vue.createElementVNode(
+              "input",
+              {
+                "onUpdate:modelValue": _cache[6] || (_cache[6] = ($event) => $data.findModeState.manualTargetName = $event),
+                class: "manual-input",
+                placeholder: "例如：钥匙、杯子、药盒",
+                "placeholder-class": "manual-placeholder"
+              },
+              null,
+              512
+              /* NEED_PATCH */
+            ), [
+              [vue.vModelText, $data.findModeState.manualTargetName]
+            ]),
+            vue.createElementVNode("view", { class: "manual-actions" }, [
+              vue.createElementVNode("button", {
+                class: "mini-btn primary-mini",
+                onClick: _cache[7] || (_cache[7] = (...args) => $options.confirmManualTarget && $options.confirmManualTarget(...args))
+              }, "确认开始"),
+              vue.createElementVNode("button", {
+                class: "mini-btn",
+                onClick: _cache[8] || (_cache[8] = (...args) => $options.cancelManualTarget && $options.cancelManualTarget(...args))
+              }, "取消")
+            ])
+          ])) : vue.createCommentVNode("v-if", true),
+          $options.showTrackingCamera ? (vue.openBlock(), vue.createElementBlock("view", {
+            key: 1,
+            class: "camera-wrap"
+          }, [
+            vue.createElementVNode("camera", {
+              class: "tracking-camera",
+              "device-position": "back",
+              flash: "off"
+            }),
+            vue.createElementVNode("view", { class: "camera-overlay" }, [
+              vue.createElementVNode("text", { class: "camera-caption" }, "将镜头对准可能出现目标物的区域，系统约每 1.2 秒自动分析一次。")
+            ])
+          ])) : vue.createCommentVNode("v-if", true),
+          vue.createElementVNode("view", { class: "tracking-actions" }, [
+            vue.createElementVNode("button", {
+              class: "action-btn primary",
+              onClick: _cache[9] || (_cache[9] = (...args) => $options.startFindMode && $options.startFindMode(...args)),
+              disabled: $data.findModeState.isTracking || $data.loading
+            }, vue.toDisplayString($data.findModeState.isTracking ? "寻物进行中" : "开始寻物"), 9, ["disabled"]),
+            vue.createElementVNode("button", {
+              class: "action-btn ghost",
+              onClick: _cache[10] || (_cache[10] = ($event) => $options.stopFindMode("idle", "已退出寻物模式")),
+              disabled: !$data.findModeState.targetName && !$data.findModeState.isTracking && !$data.findModeState.awaitingManualInput
+            }, " 停止寻物 ", 8, ["disabled"])
+          ])
+        ]),
+        vue.createElementVNode("view", { class: "section-panel tools-panel" }, [
+          vue.createElementVNode("view", { class: "section-head" }, [
+            vue.createElementVNode("view", null, [
+              vue.createElementVNode("text", { class: "section-kicker" }, "快捷入口"),
+              vue.createElementVNode("text", { class: "section-title" }, "单次拍照识别与扩展功能")
+            ]),
+            vue.createElementVNode("text", { class: "section-tag" }, "保留原功能")
+          ]),
+          vue.createElementVNode("text", { class: "section-desc" }, "当你只想快速判断当前画面，也可以直接触发一次识别，随后继续进入知识库或用户中心。"),
+          vue.createElementVNode("view", { class: "utility-actions" }, [
+            vue.createElementVNode("button", {
+              class: "action-btn primary",
+              onClick: _cache[11] || (_cache[11] = (...args) => $options.startVoiceTrigger && $options.startVoiceTrigger(...args)),
+              disabled: $data.loading || $data.findModeState.isTracking
+            }, vue.toDisplayString($data.loading ? "识别中" : "语音识别"), 9, ["disabled"]),
+            vue.createElementVNode("button", {
+              class: "action-btn ghost",
+              onClick: _cache[12] || (_cache[12] = (...args) => $options.scanByDefaultCommand && $options.scanByDefaultCommand(...args)),
+              disabled: $data.loading || $data.findModeState.isTracking
+            }, "直接拍照", 8, ["disabled"]),
+            vue.createElementVNode("button", {
+              class: "action-btn subtle",
+              onClick: _cache[13] || (_cache[13] = (...args) => $options.goKnowledge && $options.goKnowledge(...args))
+            }, "知识库"),
+            vue.createElementVNode("button", {
+              class: "action-btn subtle",
+              onClick: _cache[14] || (_cache[14] = (...args) => $options.goUserCenter && $options.goUserCenter(...args))
+            }, "用户中心")
+          ])
+        ]),
+        $data.result ? (vue.openBlock(), vue.createElementBlock("view", {
+          key: 0,
+          class: "section-panel result-panel"
+        }, [
+          vue.createElementVNode("view", { class: "section-head" }, [
+            vue.createElementVNode("view", null, [
+              vue.createElementVNode("text", { class: "section-kicker" }, "识别归档"),
+              vue.createElementVNode("text", { class: "section-title" }, "结构化播报结果")
+            ]),
+            vue.createElementVNode("text", { class: "section-tag" }, "最新识别")
+          ]),
+          vue.createElementVNode("view", { class: "result-highlight" }, [
+            vue.createElementVNode("text", { class: "result-highlight-label" }, "核心识别"),
+            vue.createElementVNode(
+              "text",
+              { class: "result-highlight-value" },
+              vue.toDisplayString($data.result.items && $data.result.items.length && $data.result.items[0].name || $data.result.scene || "暂无结果"),
+              1
+              /* TEXT */
+            ),
+            vue.createElementVNode(
+              "text",
+              { class: "result-highlight-meta" },
+              vue.toDisplayString($data.result.positionSummary || "已完成本轮播报与归档。"),
+              1
+              /* TEXT */
+            )
+          ]),
+          vue.createElementVNode("view", { class: "result-grid" }, [
+            vue.createElementVNode("view", { class: "result-mini-card" }, [
+              vue.createElementVNode("text", { class: "result-mini-label" }, "触发指令"),
+              vue.createElementVNode(
+                "text",
+                { class: "result-mini-value" },
+                vue.toDisplayString($data.result.triggerCommand),
+                1
+                /* TEXT */
+              )
+            ]),
+            vue.createElementVNode("view", { class: "result-mini-card" }, [
+              vue.createElementVNode("text", { class: "result-mini-label" }, "识别场景"),
+              vue.createElementVNode(
+                "text",
+                { class: "result-mini-value" },
+                vue.toDisplayString($data.result.scene),
+                1
+                /* TEXT */
+              )
+            ])
+          ]),
+          vue.createElementVNode(
+            "text",
+            { class: "line" },
+            "播报：" + vue.toDisplayString($data.result.narration),
+            1
+            /* TEXT */
+          ),
+          $data.result.items && $data.result.items.length ? (vue.openBlock(), vue.createElementBlock("view", {
+            key: 0,
+            class: "result-items"
+          }, [
+            (vue.openBlock(true), vue.createElementBlock(
+              vue.Fragment,
+              null,
+              vue.renderList($data.result.items, (item, idx) => {
+                return vue.openBlock(), vue.createElementBlock("view", {
+                  class: "result-item-chip",
+                  key: `${item.name}-${idx}`
+                }, [
+                  vue.createElementVNode(
+                    "text",
+                    { class: "result-item-name" },
+                    vue.toDisplayString(item.name),
+                    1
+                    /* TEXT */
+                  ),
+                  vue.createElementVNode(
+                    "text",
+                    { class: "result-item-meta" },
+                    vue.toDisplayString(item.position || "未知方位") + " / " + vue.toDisplayString(item.confidence || 0) + "%",
+                    1
+                    /* TEXT */
+                  )
+                ]);
+              }),
+              128
+              /* KEYED_FRAGMENT */
+            ))
+          ])) : vue.createCommentVNode("v-if", true),
+          $data.result.matchedMedicineProfileSummary ? (vue.openBlock(), vue.createElementBlock("view", {
+            key: 1,
+            class: "medicine-spotlight"
+          }, [
+            vue.createElementVNode("text", { class: "medicine-spotlight-kicker" }, "药品档案命中"),
+            vue.createElementVNode(
+              "text",
+              { class: "medicine-spotlight-name" },
+              vue.toDisplayString($data.result.matchedMedicineProfileSummary.medicineName),
+              1
+              /* TEXT */
+            ),
+            $data.result.matchedMedicineProfileSummary.dosageUsage ? (vue.openBlock(), vue.createElementBlock(
+              "text",
+              {
+                key: 0,
+                class: "line"
+              },
+              "用法用量：" + vue.toDisplayString($data.result.matchedMedicineProfileSummary.dosageUsage),
+              1
+              /* TEXT */
+            )) : vue.createCommentVNode("v-if", true),
+            $data.result.matchedMedicineProfileSummary.contraindications ? (vue.openBlock(), vue.createElementBlock(
+              "text",
+              {
+                key: 1,
+                class: "line"
+              },
+              "禁忌：" + vue.toDisplayString($data.result.matchedMedicineProfileSummary.contraindications),
+              1
+              /* TEXT */
+            )) : vue.createCommentVNode("v-if", true)
+          ])) : vue.createCommentVNode("v-if", true),
+          $data.result.medicineAlert && $data.result.medicineAlert.triggered ? (vue.openBlock(), vue.createElementBlock(
+            "text",
+            {
+              key: 2,
+              class: "line warn-line"
+            },
+            "安全预警：" + vue.toDisplayString($data.result.medicineAlert.alertMessage),
+            1
+            /* TEXT */
+          )) : vue.createCommentVNode("v-if", true)
+        ])) : vue.createCommentVNode("v-if", true),
+        vue.createElementVNode("view", { class: "section-panel debug-panel" }, [
+          vue.createElementVNode("view", { class: "section-head debug-head" }, [
+            vue.createElementVNode("view", null, [
+              vue.createElementVNode("text", { class: "section-kicker" }, "运行状态"),
+              vue.createElementVNode("text", { class: "section-title" }, "调试信息")
+            ]),
+            vue.createElementVNode("button", {
+              class: "tiny",
+              onClick: _cache[15] || (_cache[15] = (...args) => $options.clearDebugLogs && $options.clearDebugLogs(...args))
+            }, "清空")
+          ]),
+          vue.createElementVNode("view", { class: "debug-grid" }, [
+            vue.createElementVNode(
+              "text",
+              { class: "debug-line" },
+              "API: " + vue.toDisplayString($data.apiBase),
+              1
+              /* TEXT */
+            ),
+            vue.createElementVNode(
+              "text",
+              { class: "debug-line" },
+              "状态: " + vue.toDisplayString($data.debug.status),
+              1
+              /* TEXT */
+            ),
+            vue.createElementVNode(
+              "text",
+              { class: "debug-line" },
+              "最后指令: " + vue.toDisplayString($data.debug.lastCommand || "-"),
+              1
+              /* TEXT */
+            ),
+            vue.createElementVNode(
+              "text",
+              { class: "debug-line" },
+              "最后图片: " + vue.toDisplayString($data.debug.lastImagePath || "-"),
+              1
+              /* TEXT */
+            ),
+            vue.createElementVNode(
+              "text",
+              { class: "debug-line" },
+              "最后响应码: " + vue.toDisplayString($data.debug.lastStatusCode || "-"),
+              1
+              /* TEXT */
+            ),
+            vue.createElementVNode(
+              "text",
+              { class: "debug-line" },
+              "最后错误: " + vue.toDisplayString($data.debug.lastError || "-"),
+              1
+              /* TEXT */
+            )
+          ]),
+          (vue.openBlock(true), vue.createElementBlock(
+            vue.Fragment,
+            null,
+            vue.renderList($data.debug.logs, (log, idx) => {
+              return vue.openBlock(), vue.createElementBlock(
+                "text",
+                {
+                  class: "debug-log",
+                  key: idx
+                },
+                vue.toDisplayString(log),
+                1
+                /* TEXT */
+              );
+            }),
+            128
+            /* KEYED_FRAGMENT */
+          ))
+        ])
+      ],
+      2
+      /* CLASS */
+    );
+  }
+  const PagesIndexIndex = /* @__PURE__ */ _export_sfc(_sfc_main$4, [["render", _sfc_render$3], ["__file", "E:/code1/homework/user/frontend/pages/index/index.vue"]]);
+  const _sfc_main$3 = {
+    data() {
+      return {
+        apiBase: "http://10.69.65.44:8080",
+        mode: "login",
+        loading: false,
+        userInfo: null,
+        form: {
+          username: "",
+          password: "",
+          nickname: "",
+          phone: "",
+          email: ""
+        }
+      };
+    },
+    onLoad() {
+      const cached = uni.getStorageSync("auth_user");
+      if (cached && cached.id) {
+        this.userInfo = cached;
+        uni.reLaunch({
+          url: "/pages/index/index"
+        });
+      }
+    },
+    methods: {
+      submit() {
+        if (!this.form.username || !this.form.password) {
+          uni.showToast({ title: "用户名和密码不能为空", icon: "none" });
+          return;
+        }
+        if (this.mode === "register" && !this.form.nickname) {
+          uni.showToast({ title: "昵称不能为空", icon: "none" });
+          return;
+        }
+        this.loading = true;
+        const url = this.mode === "login" ? `${this.apiBase}/api/auth/login` : `${this.apiBase}/api/auth/register`;
+        const data = this.mode === "login" ? {
+          username: this.form.username,
+          password: this.form.password
+        } : {
+          username: this.form.username,
+          password: this.form.password,
+          nickname: this.form.nickname,
+          phone: this.form.phone,
+          email: this.form.email
+        };
+        uni.request({
+          url,
+          method: "POST",
+          header: {
+            "Content-Type": "application/json"
+          },
+          data,
+          success: (res) => {
+            this.loading = false;
+            if (res.statusCode !== 200) {
+              const msg = res.data && res.data.message ? res.data.message : "请求失败";
+              uni.showToast({ title: msg, icon: "none" });
+              return;
+            }
+            const user = res.data;
+            this.userInfo = user;
+            uni.setStorageSync("auth_user", user);
+            uni.showToast({ title: this.mode === "login" ? "登录成功" : "注册成功", icon: "success" });
+            setTimeout(() => {
+              uni.reLaunch({
+                url: "/pages/index/index"
+              });
+            }, 300);
+          },
+          fail: () => {
+            this.loading = false;
+            uni.showToast({ title: "请求失败，请检查后端服务", icon: "none" });
+          }
+        });
+      },
+      goBack() {
+        uni.navigateBack({
+          fail: () => {
+            uni.reLaunch({ url: "/pages/index/index" });
+          }
+        });
+      }
+    }
+  };
+  function _sfc_render$2(_ctx, _cache, $props, $setup, $data, $options) {
+    return vue.openBlock(), vue.createElementBlock("view", { class: "page" }, [
+      vue.createElementVNode("view", { class: "card" }, [
+        vue.createElementVNode("text", { class: "title" }, "账号中心"),
+        vue.createElementVNode("text", { class: "subtitle" }, "登录后可进入智能识别与个性化设置"),
+        vue.createElementVNode("view", { class: "tabs" }, [
+          vue.createElementVNode(
+            "view",
+            {
+              class: vue.normalizeClass(["tab", $data.mode === "login" ? "active" : ""]),
+              onClick: _cache[0] || (_cache[0] = ($event) => $data.mode = "login")
+            },
+            "登录",
+            2
+            /* CLASS */
+          ),
+          vue.createElementVNode(
+            "view",
+            {
+              class: vue.normalizeClass(["tab", $data.mode === "register" ? "active" : ""]),
+              onClick: _cache[1] || (_cache[1] = ($event) => $data.mode = "register")
+            },
+            "注册",
+            2
+            /* CLASS */
+          )
+        ]),
+        vue.withDirectives(vue.createElementVNode(
+          "input",
+          {
+            class: "input",
+            "onUpdate:modelValue": _cache[2] || (_cache[2] = ($event) => $data.form.username = $event),
+            placeholder: "用户名（4-50位）"
+          },
+          null,
+          512
+          /* NEED_PATCH */
+        ), [
+          [
+            vue.vModelText,
+            $data.form.username,
+            void 0,
+            { trim: true }
+          ]
+        ]),
+        vue.withDirectives(vue.createElementVNode(
+          "input",
+          {
+            class: "input",
+            "onUpdate:modelValue": _cache[3] || (_cache[3] = ($event) => $data.form.password = $event),
+            password: "",
+            placeholder: "密码（6-20位）"
+          },
+          null,
+          512
+          /* NEED_PATCH */
+        ), [
+          [
+            vue.vModelText,
+            $data.form.password,
+            void 0,
+            { trim: true }
+          ]
+        ]),
+        $data.mode === "register" ? vue.withDirectives((vue.openBlock(), vue.createElementBlock(
+          "input",
+          {
+            key: 0,
+            class: "input",
+            "onUpdate:modelValue": _cache[4] || (_cache[4] = ($event) => $data.form.nickname = $event),
+            placeholder: "昵称"
+          },
+          null,
+          512
+          /* NEED_PATCH */
+        )), [
+          [
+            vue.vModelText,
+            $data.form.nickname,
+            void 0,
+            { trim: true }
+          ]
+        ]) : vue.createCommentVNode("v-if", true),
+        $data.mode === "register" ? vue.withDirectives((vue.openBlock(), vue.createElementBlock(
+          "input",
+          {
+            key: 1,
+            class: "input",
+            "onUpdate:modelValue": _cache[5] || (_cache[5] = ($event) => $data.form.phone = $event),
+            placeholder: "手机号（可选）"
+          },
+          null,
+          512
+          /* NEED_PATCH */
+        )), [
+          [
+            vue.vModelText,
+            $data.form.phone,
+            void 0,
+            { trim: true }
+          ]
+        ]) : vue.createCommentVNode("v-if", true),
+        $data.mode === "register" ? vue.withDirectives((vue.openBlock(), vue.createElementBlock(
+          "input",
+          {
+            key: 2,
+            class: "input",
+            "onUpdate:modelValue": _cache[6] || (_cache[6] = ($event) => $data.form.email = $event),
+            placeholder: "邮箱（可选）"
+          },
+          null,
+          512
+          /* NEED_PATCH */
+        )), [
+          [
+            vue.vModelText,
+            $data.form.email,
+            void 0,
+            { trim: true }
+          ]
+        ]) : vue.createCommentVNode("v-if", true),
+        vue.createElementVNode("button", {
+          class: "btn primary",
+          onClick: _cache[7] || (_cache[7] = (...args) => $options.submit && $options.submit(...args)),
+          disabled: $data.loading
+        }, vue.toDisplayString($data.loading ? "提交中..." : $data.mode === "login" ? "立即登录" : "立即注册"), 9, ["disabled"]),
+        vue.createElementVNode("button", {
+          class: "btn",
+          onClick: _cache[8] || (_cache[8] = (...args) => $options.goBack && $options.goBack(...args))
+        }, "返回首页"),
+        $data.userInfo ? (vue.openBlock(), vue.createElementBlock("view", {
+          key: 3,
+          class: "result"
+        }, [
+          vue.createElementVNode(
+            "text",
+            { class: "line" },
+            "当前用户：" + vue.toDisplayString($data.userInfo.nickname) + "（" + vue.toDisplayString($data.userInfo.username) + "）",
+            1
+            /* TEXT */
+          )
+        ])) : vue.createCommentVNode("v-if", true)
+      ])
+    ]);
+  }
+  const PagesAuthAuth = /* @__PURE__ */ _export_sfc(_sfc_main$3, [["render", _sfc_render$2], ["__file", "E:/code1/homework/user/frontend/pages/auth/auth.vue"]]);
+  const _sfc_main$2 = {
+    data() {
+      return {
+        voiceOptions: [
+          { label: "柔和女声 Cherry", value: "Cherry" },
+          { label: "沉稳男声 Ethan", value: "Ethan" },
+          { label: "清晰女声 Serena", value: "Serena" }
+        ],
+        granularityOptions: [
+          { label: "简洁", value: "concise" },
+          { label: "详细", value: "detailed" }
+        ],
+        gestureOptions: [
+          { label: "无动作", value: "none" },
+          { label: "语音触发识别", value: "voice_trigger" },
+          { label: "直接拍照识别", value: "direct_scan" },
+          { label: "打开用户中心", value: "open_user_center" }
+        ],
+        contrastOptions: [
+          { label: "黑金模式", value: "black-gold" },
+          { label: "黑黄模式", value: "black-yellow" }
+        ],
+        form: loadUserSettings()
+      };
+    },
+    onLoad() {
+      const user = uni.getStorageSync("auth_user");
+      if (!user || !user.id) {
+        uni.reLaunch({ url: "/pages/auth/auth" });
+      }
+    },
+    computed: {
+      voiceIndex() {
+        return Math.max(0, this.voiceOptions.findIndex((item) => item.value === this.form.voiceTimbre));
+      },
+      granularityIndex() {
+        return Math.max(0, this.granularityOptions.findIndex((item) => item.value === this.form.broadcastGranularity));
+      },
+      gestureSingleIndex() {
+        return Math.max(0, this.gestureOptions.findIndex((item) => item.value === this.form.gestureSingleTap));
+      },
+      gestureDoubleIndex() {
+        return Math.max(0, this.gestureOptions.findIndex((item) => item.value === this.form.gestureDoubleTap));
+      },
+      gestureLongIndex() {
+        return Math.max(0, this.gestureOptions.findIndex((item) => item.value === this.form.gestureLongPress));
+      },
+      contrastIndex() {
+        return Math.max(0, this.contrastOptions.findIndex((item) => item.value === this.form.contrastMode));
+      },
+      hapticLabel() {
+        if (this.form.hapticLevel === 1)
+          return "轻";
+        if (this.form.hapticLevel === 2)
+          return "中";
+        return "强";
+      },
+      themeClass() {
+        return this.form.contrastMode === "black-yellow" ? "theme-yellow" : "theme-gold";
+      },
+      largeFontClass() {
+        return this.form.extraLargeText ? "font-large" : "";
+      }
+    },
+    methods: {
+      onRateChange(e) {
+        this.form.speechRate = Number((e.detail.value / 100).toFixed(2));
+      },
+      onVoiceChange(e) {
+        this.form.voiceTimbre = this.voiceOptions[e.detail.value].value;
+      },
+      onGranularityChange(e) {
+        this.form.broadcastGranularity = this.granularityOptions[e.detail.value].value;
+      },
+      onGestureChange(field, e) {
+        this.form[field] = this.gestureOptions[e.detail.value].value;
+      },
+      onHapticChange(e) {
+        this.form.hapticLevel = Number(e.detail.value);
+      },
+      onContrastChange(e) {
+        this.form.contrastMode = this.contrastOptions[e.detail.value].value;
+      },
+      onLargeTextChange(e) {
+        this.form.extraLargeText = !!e.detail.value;
+      },
+      testHaptic() {
+        if (this.form.hapticLevel === 1) {
+          uni.vibrateShort();
+          return;
+        }
+        if (this.form.hapticLevel === 2) {
+          uni.vibrateShort();
+          setTimeout(() => uni.vibrateShort(), 180);
+          return;
+        }
+        uni.vibrateLong();
+      },
+      save() {
+        this.form = saveUserSettings(this.form);
+        uni.showToast({ title: "设置已保存", icon: "success" });
+      },
+      goKnowledge() {
+        uni.navigateTo({
+          url: "/pages/knowledge/knowledge"
+        });
+      },
+      backToHome() {
+        uni.navigateBack({
+          fail: () => {
+            uni.reLaunch({ url: "/pages/index/index" });
+          }
+        });
+      }
+    }
+  };
+  function _sfc_render$1(_ctx, _cache, $props, $setup, $data, $options) {
+    return vue.openBlock(), vue.createElementBlock(
+      "view",
+      {
+        class: vue.normalizeClass(["page", $options.themeClass, $options.largeFontClass])
+      },
+      [
+        vue.createElementVNode("view", { class: "page-glow glow-one" }),
+        vue.createElementVNode("view", { class: "page-glow glow-two" }),
+        vue.createElementVNode("view", { class: "page-grid" }),
+        vue.createElementVNode("view", { class: "hero-shell" }, [
+          vue.createElementVNode("view", { class: "hero-copy" }, [
+            vue.createElementVNode("text", { class: "eyebrow" }, "Personal Center"),
+            vue.createElementVNode("text", { class: "hero-title" }, "把语音、手势和视觉辅助调成最适合你的状态"),
+            vue.createElementVNode("text", { class: "hero-desc" }, "这里集中管理播报方式、手势映射、振动强度和低视力适配，让首页反馈更贴合你的使用习惯。"),
+            vue.createElementVNode("view", { class: "hero-actions" }, [
+              vue.createElementVNode("button", {
+                class: "action-btn primary",
+                onClick: _cache[0] || (_cache[0] = (...args) => $options.save && $options.save(...args))
+              }, "保存设置"),
+              vue.createElementVNode("button", {
+                class: "action-btn ghost",
+                onClick: _cache[1] || (_cache[1] = (...args) => $options.backToHome && $options.backToHome(...args))
+              }, "返回首页")
+            ])
+          ]),
+          vue.createElementVNode("view", { class: "hero-stats" }, [
+            vue.createElementVNode("view", { class: "stat-card stat-card-strong" }, [
+              vue.createElementVNode("text", { class: "stat-label" }, "语速"),
+              vue.createElementVNode(
+                "text",
+                { class: "stat-value" },
+                vue.toDisplayString($data.form.speechRate.toFixed(2)) + "x",
+                1
+                /* TEXT */
+              )
+            ]),
+            vue.createElementVNode("view", { class: "stat-card" }, [
+              vue.createElementVNode("text", { class: "stat-label" }, "音色"),
+              vue.createElementVNode(
+                "text",
+                { class: "stat-value stat-value-small" },
+                vue.toDisplayString($data.voiceOptions[$options.voiceIndex].label),
+                1
+                /* TEXT */
+              )
+            ]),
+            vue.createElementVNode("view", { class: "stat-card" }, [
+              vue.createElementVNode("text", { class: "stat-label" }, "振动强度"),
+              vue.createElementVNode(
+                "text",
+                { class: "stat-value" },
+                vue.toDisplayString($options.hapticLabel),
+                1
+                /* TEXT */
+              )
+            ]),
+            vue.createElementVNode("view", { class: "stat-card" }, [
+              vue.createElementVNode("text", { class: "stat-label" }, "对比模式"),
+              vue.createElementVNode(
+                "text",
+                { class: "stat-value stat-value-small" },
+                vue.toDisplayString($data.contrastOptions[$options.contrastIndex].label),
+                1
+                /* TEXT */
+              )
+            ])
+          ])
+        ]),
+        vue.createElementVNode("view", { class: "section-panel" }, [
+          vue.createElementVNode("view", { class: "section-head" }, [
+            vue.createElementVNode("view", null, [
+              vue.createElementVNode("text", { class: "section-kicker" }, "播报偏好"),
+              vue.createElementVNode("text", { class: "section-title" }, "语音自定义")
+            ]),
+            vue.createElementVNode("text", { class: "section-tag" }, "实时生效")
+          ]),
+          vue.createElementVNode("view", { class: "control-panel" }, [
+            vue.createElementVNode(
+              "text",
+              { class: "label" },
+              "语速：" + vue.toDisplayString($data.form.speechRate.toFixed(2)) + "x",
+              1
+              /* TEXT */
+            ),
+            vue.createElementVNode("slider", {
+              value: $data.form.speechRate * 100,
+              min: 50,
+              max: 300,
+              step: 1,
+              activeColor: "#ffd46b",
+              onChange: _cache[2] || (_cache[2] = (...args) => $options.onRateChange && $options.onRateChange(...args))
+            }, null, 40, ["value"])
+          ]),
+          vue.createElementVNode("view", { class: "control-grid" }, [
+            vue.createElementVNode("view", { class: "control-panel" }, [
+              vue.createElementVNode("text", { class: "label" }, "音色"),
+              vue.createElementVNode("picker", {
+                range: $data.voiceOptions,
+                "range-key": "label",
+                value: $options.voiceIndex,
+                onChange: _cache[3] || (_cache[3] = (...args) => $options.onVoiceChange && $options.onVoiceChange(...args))
+              }, [
+                vue.createElementVNode(
+                  "view",
+                  { class: "picker" },
+                  vue.toDisplayString($data.voiceOptions[$options.voiceIndex].label),
+                  1
+                  /* TEXT */
+                )
+              ], 40, ["range", "value"])
+            ]),
+            vue.createElementVNode("view", { class: "control-panel" }, [
+              vue.createElementVNode("text", { class: "label" }, "播报粒度"),
+              vue.createElementVNode("picker", {
+                range: $data.granularityOptions,
+                "range-key": "label",
+                value: $options.granularityIndex,
+                onChange: _cache[4] || (_cache[4] = (...args) => $options.onGranularityChange && $options.onGranularityChange(...args))
+              }, [
+                vue.createElementVNode(
+                  "view",
+                  { class: "picker" },
+                  vue.toDisplayString($data.granularityOptions[$options.granularityIndex].label),
+                  1
+                  /* TEXT */
+                )
+              ], 40, ["range", "value"])
+            ])
+          ])
+        ]),
+        vue.createElementVNode("view", { class: "section-panel" }, [
+          vue.createElementVNode("view", { class: "section-head" }, [
+            vue.createElementVNode("view", null, [
+              vue.createElementVNode("text", { class: "section-kicker" }, "触发方式"),
+              vue.createElementVNode("text", { class: "section-title" }, "多维交互")
+            ]),
+            vue.createElementVNode("text", { class: "section-tag" }, "手势 + 振动")
+          ]),
+          vue.createElementVNode("view", { class: "control-grid" }, [
+            vue.createElementVNode("view", { class: "control-panel" }, [
+              vue.createElementVNode("text", { class: "label" }, "单击手势"),
+              vue.createElementVNode("picker", {
+                range: $data.gestureOptions,
+                "range-key": "label",
+                value: $options.gestureSingleIndex,
+                onChange: _cache[5] || (_cache[5] = ($event) => $options.onGestureChange("gestureSingleTap", $event))
+              }, [
+                vue.createElementVNode(
+                  "view",
+                  { class: "picker" },
+                  vue.toDisplayString($data.gestureOptions[$options.gestureSingleIndex].label),
+                  1
+                  /* TEXT */
+                )
+              ], 40, ["range", "value"])
+            ]),
+            vue.createElementVNode("view", { class: "control-panel" }, [
+              vue.createElementVNode("text", { class: "label" }, "双击手势"),
+              vue.createElementVNode("picker", {
+                range: $data.gestureOptions,
+                "range-key": "label",
+                value: $options.gestureDoubleIndex,
+                onChange: _cache[6] || (_cache[6] = ($event) => $options.onGestureChange("gestureDoubleTap", $event))
+              }, [
+                vue.createElementVNode(
+                  "view",
+                  { class: "picker" },
+                  vue.toDisplayString($data.gestureOptions[$options.gestureDoubleIndex].label),
+                  1
+                  /* TEXT */
+                )
+              ], 40, ["range", "value"])
+            ]),
+            vue.createElementVNode("view", { class: "control-panel" }, [
+              vue.createElementVNode("text", { class: "label" }, "长按手势"),
+              vue.createElementVNode("picker", {
+                range: $data.gestureOptions,
+                "range-key": "label",
+                value: $options.gestureLongIndex,
+                onChange: _cache[7] || (_cache[7] = ($event) => $options.onGestureChange("gestureLongPress", $event))
+              }, [
+                vue.createElementVNode(
+                  "view",
+                  { class: "picker" },
+                  vue.toDisplayString($data.gestureOptions[$options.gestureLongIndex].label),
+                  1
+                  /* TEXT */
+                )
+              ], 40, ["range", "value"])
+            ]),
+            vue.createElementVNode("view", { class: "control-panel" }, [
+              vue.createElementVNode(
+                "text",
+                { class: "label" },
+                "振动强度：" + vue.toDisplayString($options.hapticLabel),
+                1
+                /* TEXT */
+              ),
+              vue.createElementVNode("slider", {
+                value: $data.form.hapticLevel,
+                min: 1,
+                max: 3,
+                step: 1,
+                activeColor: "#ffd46b",
+                onChange: _cache[8] || (_cache[8] = (...args) => $options.onHapticChange && $options.onHapticChange(...args))
+              }, null, 40, ["value"]),
+              vue.createElementVNode("button", {
+                class: "action-btn ghost compact-btn",
+                onClick: _cache[9] || (_cache[9] = (...args) => $options.testHaptic && $options.testHaptic(...args))
+              }, "测试振动")
+            ])
+          ])
+        ]),
+        vue.createElementVNode("view", { class: "section-panel" }, [
+          vue.createElementVNode("view", { class: "section-head" }, [
+            vue.createElementVNode("view", null, [
+              vue.createElementVNode("text", { class: "section-kicker" }, "低视力支持"),
+              vue.createElementVNode("text", { class: "section-title" }, "视觉适配")
+            ]),
+            vue.createElementVNode("text", { class: "section-tag" }, "可读性优先")
+          ]),
+          vue.createElementVNode("view", { class: "control-grid" }, [
+            vue.createElementVNode("view", { class: "control-panel" }, [
+              vue.createElementVNode("text", { class: "label" }, "高对比模式"),
+              vue.createElementVNode("picker", {
+                range: $data.contrastOptions,
+                "range-key": "label",
+                value: $options.contrastIndex,
+                onChange: _cache[10] || (_cache[10] = (...args) => $options.onContrastChange && $options.onContrastChange(...args))
+              }, [
+                vue.createElementVNode(
+                  "view",
+                  { class: "picker" },
+                  vue.toDisplayString($data.contrastOptions[$options.contrastIndex].label),
+                  1
+                  /* TEXT */
+                )
+              ], 40, ["range", "value"])
+            ]),
+            vue.createElementVNode("view", { class: "control-panel switch-panel" }, [
+              vue.createElementVNode("text", { class: "label" }, "超大字符渲染"),
+              vue.createElementVNode("switch", {
+                checked: $data.form.extraLargeText,
+                onChange: _cache[11] || (_cache[11] = (...args) => $options.onLargeTextChange && $options.onLargeTextChange(...args)),
+                color: "#ffd46b"
+              }, null, 40, ["checked"])
+            ])
+          ])
+        ]),
+        vue.createElementVNode("view", { class: "section-panel shortcut-panel" }, [
+          vue.createElementVNode("view", { class: "section-head" }, [
+            vue.createElementVNode("view", null, [
+              vue.createElementVNode("text", { class: "section-kicker" }, "快捷入口"),
+              vue.createElementVNode("text", { class: "section-title" }, "继续浏览")
+            ])
+          ]),
+          vue.createElementVNode("view", { class: "action-row" }, [
+            vue.createElementVNode("button", {
+              class: "action-btn primary",
+              onClick: _cache[12] || (_cache[12] = (...args) => $options.save && $options.save(...args))
+            }, "保存设置"),
+            vue.createElementVNode("button", {
+              class: "action-btn ghost",
+              onClick: _cache[13] || (_cache[13] = (...args) => $options.goKnowledge && $options.goKnowledge(...args))
+            }, "打开知识库"),
+            vue.createElementVNode("button", {
+              class: "action-btn ghost",
+              onClick: _cache[14] || (_cache[14] = (...args) => $options.backToHome && $options.backToHome(...args))
+            }, "返回识别页")
+          ])
+        ])
+      ],
+      2
+      /* CLASS */
+    );
+  }
+  const PagesUserCenterUserCenter = /* @__PURE__ */ _export_sfc(_sfc_main$2, [["render", _sfc_render$1], ["__file", "E:/code1/homework/user/frontend/pages/user-center/user-center.vue"]]);
+  const _sfc_main$1 = {
+    data() {
+      return {
+        settings: loadUserSettings(),
+        asking: false,
+        questionInput: "",
+        knowledge: {
+          todayScanCount: 0,
+          latestSessionId: "",
+          lastAnswer: "",
+          records: []
+        },
+        apiBase: "http://10.69.65.44:8080"
+      };
+    },
+    computed: {
+      themeClass() {
+        return this.settings.contrastMode === "black-yellow" ? "theme-yellow" : "theme-gold";
+      },
+      largeFontClass() {
+        return this.settings.extraLargeText ? "font-large" : "";
+      }
+    },
+    onLoad() {
+      const user = uni.getStorageSync("auth_user");
+      if (!user || !user.id) {
+        uni.reLaunch({ url: "/pages/auth/auth" });
+        return;
+      }
+      this.refreshRecords();
+    },
+    onShow() {
+      this.settings = loadUserSettings();
+      this.refreshRecords();
+    },
+    methods: {
+      getCurrentUser() {
+        return uni.getStorageSync("auth_user") || {};
+      },
+      formatTime(value) {
+        if (!value) {
+          return "-";
+        }
+        return String(value).replace("T", " ");
+      },
+      refreshRecords() {
+        const user = this.getCurrentUser();
+        if (!user.id) {
+          return;
+        }
+        uni.request({
+          url: `${this.apiBase}/api/knowledge/records`,
+          method: "GET",
+          data: {
+            userId: user.id,
+            limit: 8
+          },
+          success: (res) => {
+            if (res.statusCode !== 200 || !res.data) {
+              uni.showToast({ title: "加载知识库失败", icon: "none" });
+              return;
+            }
+            this.knowledge.todayScanCount = res.data.todayScanCount || 0;
+            this.knowledge.latestSessionId = res.data.latestSessionId || uni.getStorageSync("knowledge_last_session_id") || "";
+            this.knowledge.records = res.data.records || [];
+          },
+          fail: () => {
+            uni.showToast({ title: "加载知识库失败", icon: "none" });
+          }
+        });
+      },
+      askQuestion() {
+        const user = this.getCurrentUser();
+        const question = (this.questionInput || "").trim();
+        if (!user.id || !question) {
+          uni.showToast({ title: "请输入问题", icon: "none" });
+          return;
+        }
+        this.asking = true;
+        uni.request({
+          url: `${this.apiBase}/api/knowledge/ask`,
+          method: "POST",
+          header: {
+            "Content-Type": "application/json"
+          },
+          data: {
+            userId: user.id,
+            question,
+            sessionId: this.knowledge.latestSessionId || uni.getStorageSync("knowledge_last_session_id") || ""
+          },
+          success: (res) => {
+            this.asking = false;
+            if (res.statusCode !== 200 || !res.data) {
+              uni.showToast({ title: "提问失败", icon: "none" });
+              return;
+            }
+            this.knowledge.lastAnswer = res.data.answer || "";
+            if (res.data.usedSessionId) {
+              this.knowledge.latestSessionId = res.data.usedSessionId;
+              uni.setStorageSync("knowledge_last_session_id", res.data.usedSessionId);
+            }
+          },
+          fail: () => {
+            this.asking = false;
+            uni.showToast({ title: "提问失败", icon: "none" });
+          }
+        });
+      },
+      goHome() {
+        uni.navigateBack({
+          fail: () => {
+            uni.reLaunch({ url: "/pages/index/index" });
+          }
+        });
+      }
+    }
+  };
+  function _sfc_render(_ctx, _cache, $props, $setup, $data, $options) {
+    return vue.openBlock(), vue.createElementBlock(
+      "view",
+      {
+        class: vue.normalizeClass(["page", $options.themeClass, $options.largeFontClass])
+      },
+      [
+        vue.createElementVNode("view", { class: "page-glow glow-one" }),
+        vue.createElementVNode("view", { class: "page-glow glow-two" }),
+        vue.createElementVNode("view", { class: "page-grid" }),
+        vue.createElementVNode("view", { class: "hero-shell" }, [
+          vue.createElementVNode("view", { class: "hero-copy" }, [
+            vue.createElementVNode("text", { class: "eyebrow" }, "Knowledge Archive"),
+            vue.createElementVNode("text", { class: "hero-title" }, "把识别记录沉淀成可追问的知识库"),
+            vue.createElementVNode("text", { class: "hero-desc" }, "这里会自动归档最近识别结果，并围绕最近会话继续追问，帮助你把单次识别延展成连续理解。"),
+            vue.createElementVNode("view", { class: "hero-actions" }, [
+              vue.createElementVNode("button", {
+                class: "action-btn primary",
+                onClick: _cache[0] || (_cache[0] = (...args) => $options.refreshRecords && $options.refreshRecords(...args))
+              }, "刷新记录"),
+              vue.createElementVNode("button", {
+                class: "action-btn ghost",
+                onClick: _cache[1] || (_cache[1] = (...args) => $options.goHome && $options.goHome(...args))
+              }, "返回首页")
+            ])
+          ]),
+          vue.createElementVNode("view", { class: "hero-stats" }, [
+            vue.createElementVNode("view", { class: "stat-card stat-card-strong" }, [
+              vue.createElementVNode("text", { class: "stat-label" }, "今日扫描"),
+              vue.createElementVNode(
+                "text",
+                { class: "stat-value" },
+                vue.toDisplayString($data.knowledge.todayScanCount),
+                1
+                /* TEXT */
+              )
+            ]),
+            vue.createElementVNode("view", { class: "stat-card" }, [
+              vue.createElementVNode("text", { class: "stat-label" }, "最近会话"),
+              vue.createElementVNode(
+                "text",
+                { class: "stat-value stat-value-small" },
+                vue.toDisplayString($data.knowledge.latestSessionId || "-"),
+                1
+                /* TEXT */
+              )
+            ]),
+            vue.createElementVNode("view", { class: "stat-card" }, [
+              vue.createElementVNode("text", { class: "stat-label" }, "归档数量"),
+              vue.createElementVNode(
+                "text",
+                { class: "stat-value" },
+                vue.toDisplayString($data.knowledge.records.length),
+                1
+                /* TEXT */
+              )
+            ]),
+            vue.createElementVNode("view", { class: "stat-card" }, [
+              vue.createElementVNode("text", { class: "stat-label" }, "最近回答"),
+              vue.createElementVNode(
+                "text",
+                { class: "stat-value stat-value-small" },
+                vue.toDisplayString($data.knowledge.lastAnswer ? "已生成" : "暂无"),
+                1
+                /* TEXT */
+              )
+            ])
+          ])
+        ]),
+        vue.createElementVNode("view", { class: "section-panel ask-panel" }, [
+          vue.createElementVNode("view", { class: "section-head" }, [
+            vue.createElementVNode("view", null, [
+              vue.createElementVNode("text", { class: "section-kicker" }, "连续追问"),
+              vue.createElementVNode("text", { class: "section-title" }, "知识问答")
+            ]),
+            vue.createElementVNode("text", { class: "section-tag" }, "围绕最近会话")
+          ]),
+          vue.withDirectives(vue.createElementVNode(
+            "input",
+            {
+              "onUpdate:modelValue": _cache[2] || (_cache[2] = ($event) => $data.questionInput = $event),
+              class: "ask-input",
+              placeholder: "例如：刚才那个瓶子左边是什么？",
+              "placeholder-class": "placeholder"
+            },
+            null,
+            512
+            /* NEED_PATCH */
+          ), [
+            [vue.vModelText, $data.questionInput]
+          ]),
+          vue.createElementVNode("view", { class: "action-row" }, [
+            vue.createElementVNode("button", {
+              class: "action-btn primary",
+              onClick: _cache[3] || (_cache[3] = (...args) => $options.askQuestion && $options.askQuestion(...args)),
+              disabled: $data.asking
+            }, vue.toDisplayString($data.asking ? "提问中" : "开始提问"), 9, ["disabled"]),
+            vue.createElementVNode("button", {
+              class: "action-btn ghost",
+              onClick: _cache[4] || (_cache[4] = (...args) => $options.refreshRecords && $options.refreshRecords(...args))
+            }, "同步归档")
+          ]),
+          $data.knowledge.lastAnswer ? (vue.openBlock(), vue.createElementBlock("view", {
+            key: 0,
+            class: "answer-panel"
+          }, [
+            vue.createElementVNode("text", { class: "panel-kicker" }, "最近回答"),
+            vue.createElementVNode(
+              "text",
+              { class: "answer-text" },
+              vue.toDisplayString($data.knowledge.lastAnswer),
+              1
+              /* TEXT */
+            )
+          ])) : vue.createCommentVNode("v-if", true)
+        ]),
+        vue.createElementVNode("view", { class: "section-panel archive-panel" }, [
+          vue.createElementVNode("view", { class: "section-head" }, [
+            vue.createElementVNode("view", null, [
+              vue.createElementVNode("text", { class: "section-kicker" }, "结构化记录"),
+              vue.createElementVNode("text", { class: "section-title" }, "最近归档")
+            ]),
+            vue.createElementVNode("text", { class: "section-tag" }, "最近 8 条")
+          ]),
+          !$data.knowledge.records.length ? (vue.openBlock(), vue.createElementBlock("view", {
+            key: 0,
+            class: "empty-panel"
+          }, [
+            vue.createElementVNode("text", { class: "empty-title" }, "还没有归档记录"),
+            vue.createElementVNode("text", { class: "empty-text" }, "先回到首页识别一次物品，再回来继续追问会更完整。"),
+            vue.createElementVNode("button", {
+              class: "action-btn primary compact-btn",
+              onClick: _cache[5] || (_cache[5] = (...args) => $options.goHome && $options.goHome(...args))
+            }, "去识别页")
+          ])) : vue.createCommentVNode("v-if", true),
+          (vue.openBlock(true), vue.createElementBlock(
+            vue.Fragment,
+            null,
+            vue.renderList($data.knowledge.records, (record) => {
+              return vue.openBlock(), vue.createElementBlock("view", {
+                key: record.id,
+                class: "record-panel"
+              }, [
+                vue.createElementVNode("view", { class: "record-head" }, [
+                  vue.createElementVNode(
+                    "text",
+                    { class: "record-title" },
+                    vue.toDisplayString(record.scene || "未知场景"),
+                    1
+                    /* TEXT */
+                  ),
+                  vue.createElementVNode(
+                    "text",
+                    { class: "record-time" },
+                    vue.toDisplayString($options.formatTime(record.capturedAt)),
+                    1
+                    /* TEXT */
+                  )
+                ]),
+                vue.createElementVNode("view", { class: "record-grid" }, [
+                  vue.createElementVNode("view", { class: "record-meta" }, [
+                    vue.createElementVNode("text", { class: "record-meta-label" }, "触发指令"),
+                    vue.createElementVNode(
+                      "text",
+                      { class: "record-meta-value" },
+                      vue.toDisplayString(record.triggerCommand || "-"),
+                      1
+                      /* TEXT */
+                    )
+                  ]),
+                  vue.createElementVNode("view", { class: "record-meta" }, [
+                    vue.createElementVNode("text", { class: "record-meta-label" }, "地点"),
+                    vue.createElementVNode(
+                      "text",
+                      { class: "record-meta-value" },
+                      vue.toDisplayString(record.locationText || "未记录地点"),
+                      1
+                      /* TEXT */
+                    )
+                  ])
+                ]),
+                vue.createElementVNode(
+                  "text",
+                  { class: "record-line" },
+                  "播报：" + vue.toDisplayString(record.narration || "-"),
+                  1
+                  /* TEXT */
+                ),
+                record.items && record.items.length ? (vue.openBlock(), vue.createElementBlock("view", {
+                  key: 0,
+                  class: "item-list"
+                }, [
+                  (vue.openBlock(true), vue.createElementBlock(
+                    vue.Fragment,
+                    null,
+                    vue.renderList(record.items || [], (item) => {
+                      return vue.openBlock(), vue.createElementBlock("view", {
+                        key: item.id,
+                        class: "item-chip"
+                      }, [
+                        vue.createElementVNode(
+                          "text",
+                          { class: "item-name" },
+                          vue.toDisplayString(item.name),
+                          1
+                          /* TEXT */
+                        ),
+                        vue.createElementVNode(
+                          "text",
+                          { class: "item-meta" },
+                          vue.toDisplayString(item.position || "未知方位") + " / 置信度 " + vue.toDisplayString(item.confidence || 0) + "%",
+                          1
+                          /* TEXT */
+                        )
+                      ]);
+                    }),
+                    128
+                    /* KEYED_FRAGMENT */
+                  ))
+                ])) : vue.createCommentVNode("v-if", true)
+              ]);
+            }),
+            128
+            /* KEYED_FRAGMENT */
+          ))
+        ])
+      ],
+      2
+      /* CLASS */
+    );
+  }
+  const PagesKnowledgeKnowledge = /* @__PURE__ */ _export_sfc(_sfc_main$1, [["render", _sfc_render], ["__file", "E:/code1/homework/user/frontend/pages/knowledge/knowledge.vue"]]);
+  __definePage("pages/index/index", PagesIndexIndex);
+  __definePage("pages/auth/auth", PagesAuthAuth);
+  __definePage("pages/user-center/user-center", PagesUserCenterUserCenter);
+  __definePage("pages/knowledge/knowledge", PagesKnowledgeKnowledge);
+  const _sfc_main = {
+    onLaunch: function() {
+      formatAppLog("log", "at App.vue:4", "App Launch");
+    },
+    onShow: function() {
+      formatAppLog("log", "at App.vue:7", "App Show");
+    },
+    onHide: function() {
+      formatAppLog("log", "at App.vue:10", "App Hide");
+    }
+  };
+  const App = /* @__PURE__ */ _export_sfc(_sfc_main, [["__file", "E:/code1/homework/user/frontend/App.vue"]]);
+  function createApp() {
+    const app = vue.createVueApp(App);
+    return {
+      app
+    };
+  }
+  const { app: __app__, Vuex: __Vuex__, Pinia: __Pinia__ } = createApp();
+  uni.Vuex = __Vuex__;
+  uni.Pinia = __Pinia__;
+  __app__.provide("__globalStyles", __uniConfig.styles);
+  __app__._component.mpType = "app";
+  __app__._component.render = () => {
+  };
+  __app__.mount("#app");
+})(Vue);

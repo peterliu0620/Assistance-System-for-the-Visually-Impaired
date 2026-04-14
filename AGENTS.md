@@ -1,6 +1,8 @@
 # Repository Guidelines
 
 ## Project Structure & Module Organization
+All paths in this document are relative to the repository root. If the runtime `cwd`, workspace path, or sandbox context differs from the documented example path, verify the actual repository root first and then resolve `backend/` and `frontend/` from that root before running commands.
+
 This repository has two main modules:
 - `backend/`: Spring Boot API service. Core Java code is in `backend/src/main/java/com/example/demo`, configuration is in `backend/src/main/resources/application.properties`, and tests are in `backend/src/test/java/com/example/demo`.
 - `frontend/`: uni-app Vue client. Pages live in `frontend/pages/` (current entry: `pages/index/index.vue`), shared assets are in `frontend/static/`, and app-level config files are `pages.json`, `manifest.json`, and `uni.scss`.

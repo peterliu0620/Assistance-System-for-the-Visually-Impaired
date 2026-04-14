@@ -1,5 +1,7 @@
-<script>
-	export default {
+<script lang="ts">
+	import Vue from 'vue';
+
+	export default Vue.extend({
 		onLaunch: function() {
 			console.log('App Launch')
 		},
@@ -9,7 +11,7 @@
 		onHide: function() {
 			console.log('App Hide')
 		}
-	}
+	})
 </script>
 
 <style>

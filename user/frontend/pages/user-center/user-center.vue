@@ -149,11 +149,18 @@
 	</view>
 </template>
 
-<script>
-	import { loadUserSettings, saveUserSettings } from '../../utils/user-settings.js'
-	import AppTabBar from '../../components/app-tab-bar.vue'
+<script lang="ts">
+	import Vue from 'vue';
+	import { loadUserSettings, saveUserSettings } from '../../utils/user-settings';
+	import AppTabBar from '../../components/app-tab-bar.vue';
+	import type { AuthUser, BroadcastGranularity, ContrastMode, GestureAction, UserSettings } from '../../types/models';
 
-	export default {
+	interface OptionItem<T> {
+		label: string;
+		value: T;
+	}
+
+	export default Vue.extend({
 		components: {
 			AppTabBar
 		},
@@ -163,26 +170,26 @@
 					{ label: '柔和女声 Cherry', value: 'Cherry' },
 					{ label: '沉稳男声 Ethan', value: 'Ethan' },
 					{ label: '清晰女声 Serena', value: 'Serena' }
-				],
+				] as Array<OptionItem<string>>,
 				granularityOptions: [
 					{ label: '简洁', value: 'concise' },
 					{ label: '详细', value: 'detailed' }
-				],
+				] as Array<OptionItem<BroadcastGranularity>>,
 				gestureOptions: [
 					{ label: '无动作', value: 'none' },
 					{ label: '语音触发识别', value: 'voice_trigger' },
 					{ label: '直接拍照识别', value: 'direct_scan' },
 					{ label: '打开用户中心', value: 'open_user_center' }
-				],
+				] as Array<OptionItem<GestureAction>>,
 				contrastOptions: [
 					{ label: '黑金模式', value: 'black-gold' },
 					{ label: '黑黄模式', value: 'black-yellow' }
-				],
-				form: loadUserSettings()
+				] as Array<OptionItem<ContrastMode>>,
+				form: loadUserSettings() as UserSettings
 			}
 		},
 		onLoad() {
-			const user = uni.getStorageSync('auth_user')
+			const user = uni.getStorageSync('auth_user') as AuthUser
 			if (!user || !user.id) {
 				uni.reLaunch({ url: '/pages/auth/auth' })
 			}
@@ -219,25 +226,25 @@
 			}
 		},
 		methods: {
-			onRateChange(e) {
+			onRateChange(e: { detail: { value: number } }) {
 				this.form.speechRate = Number((e.detail.value / 100).toFixed(2))
 			},
-			onVoiceChange(e) {
+			onVoiceChange(e: { detail: { value: number } }) {
 				this.form.voiceTimbre = this.voiceOptions[e.detail.value].value
 			},
-			onGranularityChange(e) {
+			onGranularityChange(e: { detail: { value: number } }) {
 				this.form.broadcastGranularity = this.granularityOptions[e.detail.value].value
 			},
-			onGestureChange(field, e) {
+			onGestureChange(field: 'gestureSingleTap' | 'gestureDoubleTap' | 'gestureLongPress', e: { detail: { value: number } }) {
 				this.form[field] = this.gestureOptions[e.detail.value].value
 			},
-			onHapticChange(e) {
+			onHapticChange(e: { detail: { value: number } }) {
 				this.form.hapticLevel = Number(e.detail.value)
 			},
-			onContrastChange(e) {
+			onContrastChange(e: { detail: { value: number } }) {
 				this.form.contrastMode = this.contrastOptions[e.detail.value].value
 			},
-			onLargeTextChange(e) {
+			onLargeTextChange(e: { detail: { value: boolean } }) {
 				this.form.extraLargeText = !!e.detail.value
 			},
 			testHaptic() {
@@ -275,7 +282,7 @@
 				})
 			}
 		}
-	}
+	})
 </script>
 
 <style>
