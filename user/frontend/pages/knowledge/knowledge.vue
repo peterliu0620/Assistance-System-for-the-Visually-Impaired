@@ -112,6 +112,7 @@
 
 <script lang="ts">
 	import { defineComponent } from 'vue';
+	import { API_BASE } from '../../utils/api';
 	import { loadUserSettings } from '../../utils/user-settings';
 	import AppTabBar from '../../components/app-tab-bar.vue';
 	import type { AuthUser, KnowledgeRecord, UserSettings } from '../../types/models';
@@ -138,7 +139,7 @@
 					lastAnswer: '',
 					records: []
 				} as KnowledgeState,
-				apiBase: 'http://10.135.244.98:8080'
+				apiBase: API_BASE
 			}
 		},
 		computed: {

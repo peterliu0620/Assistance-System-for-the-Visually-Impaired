@@ -243,6 +243,7 @@
 
 <script lang="ts">
 	import { defineComponent } from 'vue';
+	import { API_BASE } from '../../utils/api';
 	import { loadUserSettings } from '../../utils/user-settings';
 	import AppTabBar from '../../components/app-tab-bar.vue';
 	import type { AuthUser, GestureAction, UserSettings } from '../../types/models';
@@ -280,7 +281,7 @@
 			return {
 				loading: false,
 				result: null as any,
-				apiBase: 'http://10.135.244.98:8080',
+				apiBase: API_BASE,
 				audioPlayer: null as any,
 				cameraContext: null as any,
 				singleTapTimer: null as ReturnType<typeof setTimeout> | null,

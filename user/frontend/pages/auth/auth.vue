@@ -64,6 +64,7 @@
 
 <script lang="ts">
 	import { defineComponent } from 'vue';
+	import { API_BASE } from '../../utils/api';
 	import type { AuthUser } from '../../types/models';
 
 	interface AuthForm {
@@ -77,7 +78,7 @@
 	export default defineComponent({
 		data() {
 			return {
-				apiBase: 'http://10.135.244.98:8080',
+				apiBase: API_BASE,
 				mode: 'login',
 				loading: false,
 				userInfo: null as AuthUser | null,
