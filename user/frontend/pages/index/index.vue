@@ -981,11 +981,13 @@
 							this.setDebugError(`语音播报失败: ${e && e.message ? e.message : 'unknown'}`)
 						}
 					},
-					fail: () => {
+					fail: (err) => {
 						this.loading = false
 						this.debug.status = 'upload-failed'
-						this.setDebugError('识别请求失败，请确认后端已启动')
-						uni.showToast({ title: '识别请求失败，请确认后端已启动', icon: 'none' })
+						const detail = err && typeof err === 'object' && 'errMsg' in err ? String((err as { errMsg?: string }).errMsg || '') : ''
+						const message = detail ? `识别请求失败: ${detail}` : '识别请求失败，请确认后端已启动'
+						this.setDebugError(message)
+						uni.showToast({ title: '识别请求失败，请查看调试信息', icon: 'none' })
 					}
 				})
 			},
