@@ -42,11 +42,33 @@ export interface FamilyBinding {
   createdAt?: string | null;
 }
 
+export interface FamilyMember {
+  id: number;
+  name: string;
+  phone?: string | null;
+  email?: string | null;
+  bindingCount: number;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+}
+
+export interface FamilyMemberPayload {
+  name: string;
+  phone: string;
+  email: string;
+}
+
 export interface FamilyBindingPayload {
   userId: number;
   familyName: string;
   familyPhone: string;
   familyEmail: string;
+  relationship: string;
+  status: 'ACTIVE';
+}
+
+export interface FamilyMemberBindingPayload {
+  userId: number;
   relationship: string;
   status: 'ACTIVE';
 }
