@@ -1,0 +1,12 @@
+{
+  "name": "user-frontend",
+  "appid": "",
+  "description": "Minimal H5 and Playwright test base for user frontend.",
+  "versionName": "0.1.0",
+  "versionCode": "100",
+  "transformPx": false,
+  "uniStatistics": {
+    "enable": false
+  },
+  "vueVersion": "3"
+}

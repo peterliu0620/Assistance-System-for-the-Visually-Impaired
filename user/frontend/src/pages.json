@@ -1,0 +1,16 @@
+{
+  "pages": [
+    {
+      "path": "pages/index",
+      "type": "home",
+      "style": {
+        "navigationBarTitleText": "user frontend base"
+      }
+    }
+  ],
+  "globalStyle": {
+    "navigationBarBackgroundColor": "#08111a",
+    "navigationBarTextStyle": "white",
+    "backgroundColor": "#08111a"
+  }
+}
