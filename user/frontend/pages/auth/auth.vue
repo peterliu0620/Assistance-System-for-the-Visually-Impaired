@@ -7,31 +7,43 @@
 		<view class="auth-shell">
 			<view class="brand-column">
 				<text class="brand-eyebrow">Vision Guide</text>
-				<text class="brand-title">把识别、寻物和知识归档收进一个更顺手的入口</text>
-				<text class="brand-desc">登录后即可进入实时识别、导盲寻物与个性化无障碍设置，让播报和交互习惯都保持一致。</text>
+				<text class="brand-title">同一入口，切换两种照护视角</text>
+				<text class="brand-desc">视障人士进入识别工作台，家人进入记录与登记中心。首版全部使用本地 mock 和缓存，方便我们先把前端流程走通。</text>
 
-				<view class="brand-rail">
-					<view class="brand-rail-item">
-						<text class="brand-rail-label">模式</text>
-						<text class="brand-rail-value">{{ mode === 'login' ? '账号登录' : '新用户注册' }}</text>
-					</view>
-					<view class="brand-rail-item">
-						<text class="brand-rail-label">能力</text>
-						<text class="brand-rail-value">识别 / 寻物 / 知识追问</text>
+				<view class="role-showcase">
+					<view
+						v-for="item in roleOptions"
+						:key="item.value"
+						:class="['role-card', selectedRole === item.value ? 'role-card-active' : '']"
+						@click="selectedRole = item.value"
+					>
+						<text class="role-name">{{ item.label }}</text>
+						<text class="role-desc">{{ item.desc }}</text>
 					</view>
 				</view>
 
-				<view class="feature-list">
-					<view class="feature-item">连续抽帧追踪目标物，语音与震动同步反馈</view>
-					<view class="feature-item">自动归档识别记录，支持围绕最近会话继续提问</view>
-					<view class="feature-item">手势、语速、对比模式集中管理，进入首页后即时生效</view>
+				<view class="brand-rail">
+					<view class="brand-rail-item">
+						<text class="brand-rail-label">当前身份</text>
+						<text class="brand-rail-value">{{ currentRoleLabel }}</text>
+					</view>
+					<view class="brand-rail-item">
+						<text class="brand-rail-label">进入后首页</text>
+						<text class="brand-rail-value">{{ selectedRole === USER_ROLE_FAMILY ? '家属中心' : '识别首页' }}</text>
+					</view>
+				</view>
+
+				<view class="demo-panel">
+					<text class="demo-title">体验账号</text>
+					<text class="demo-line">视障人士：`vision_demo / 123456`</text>
+					<text class="demo-line">家人：`family_demo / 123456`</text>
 				</view>
 			</view>
 
 			<view class="auth-panel">
 				<view class="panel-head">
-					<text class="panel-kicker">账号中心</text>
-					<text class="panel-title">{{ mode === 'login' ? '继续使用你的辅助工作台' : '创建一个新的个人空间' }}</text>
+					<text class="panel-kicker">身份登录</text>
+					<text class="panel-title">{{ mode === 'login' ? '先选择身份，再进入对应工作区' : '创建当前身份下的新账号' }}</text>
 				</view>
 
 				<view class="tabs">
@@ -39,9 +51,20 @@
 					<view :class="['tab', mode === 'register' ? 'active' : '']" @click="mode = 'register'">注册</view>
 				</view>
 
+				<view class="role-picker">
+					<view
+						v-for="item in roleOptions"
+						:key="item.value"
+						:class="['picker-chip', selectedRole === item.value ? 'picker-chip-active' : '']"
+						@click="selectedRole = item.value"
+					>
+						{{ item.label }}
+					</view>
+				</view>
+
 				<view class="form-stack">
-					<input class="input" v-model.trim="form.username" placeholder="用户名（4-50位）" />
-					<input class="input" v-model.trim="form.password" password placeholder="密码（6-20位）" />
+					<input class="input" v-model.trim="form.username" placeholder="用户名（至少 4 位）" />
+					<input class="input" v-model.trim="form.password" password placeholder="密码（至少 6 位）" />
 					<input v-if="mode === 'register'" class="input" v-model.trim="form.nickname" placeholder="昵称" />
 					<input v-if="mode === 'register'" class="input" v-model.trim="form.phone" placeholder="手机号（可选）" />
 					<input v-if="mode === 'register'" class="input" v-model.trim="form.email" placeholder="邮箱（可选）" />
@@ -49,123 +72,102 @@
 
 				<view class="action-group">
 					<button class="btn primary" @click="submit" :disabled="loading">
-						{{ loading ? '提交中...' : mode === 'login' ? '立即登录' : '立即注册' }}
+						{{ loading ? '提交中...' : mode === 'login' ? `以${currentRoleLabel}身份登录` : `注册${currentRoleLabel}账号` }}
 					</button>
-					<button class="btn secondary" @click="goBack">返回首页</button>
+					<button class="btn secondary" @click="fillDemoAccount">填入体验账号</button>
 				</view>
 
-				<view class="result" v-if="userInfo">
+				<view class="result" v-if="userInfo && userInfo.id">
 					<text class="line">当前用户：{{ userInfo.nickname }}（{{ userInfo.username }}）</text>
+					<text class="line">身份：{{ getRoleLabel(userInfo.role) }}</text>
 				</view>
 			</view>
 		</view>
 	</view>
 </template>
 
-<script lang="ts">
+<script>
 	import { defineComponent } from 'vue';
-	import { API_BASE } from '../../utils/api';
-	import type { AuthUser } from '../../types/models';
-
-	interface AuthForm {
-		username: string;
-		password: string;
-		nickname: string;
-		phone: string;
-		email: string;
-	}
+	import {
+		ROLE_OPTIONS,
+		USER_ROLE_FAMILY,
+		USER_ROLE_VISION,
+		getAuthUser,
+		getDefaultRouteByRole,
+		getRoleLabel,
+		loginWithMock,
+		registerWithMock
+	} from '../../utils/auth';
 
 	export default defineComponent({
 		data() {
 			return {
-				apiBase: API_BASE,
 				mode: 'login',
 				loading: false,
-				userInfo: null as AuthUser | null,
+				userInfo: null,
+				roleOptions: ROLE_OPTIONS,
+				selectedRole: USER_ROLE_VISION,
 				form: {
 					username: '',
 					password: '',
 					nickname: '',
 					phone: '',
 					email: ''
-				} as AuthForm
+				},
+				USER_ROLE_FAMILY,
+				USER_ROLE_VISION
+			};
+		},
+		computed: {
+			currentRoleLabel() {
+				return getRoleLabel(this.selectedRole);
 			}
 		},
 		onLoad() {
-			const cached = uni.getStorageSync('auth_user') as AuthUser
+			const cached = getAuthUser();
 			if (cached && cached.id) {
-				this.userInfo = cached
+				this.userInfo = cached;
 				uni.reLaunch({
-					url: '/pages/index/index'
-				})
+					url: getDefaultRouteByRole(cached.role)
+				});
 			}
 		},
 		methods: {
-			submit() {
-				if (!this.form.username || !this.form.password) {
-					uni.showToast({ title: '用户名和密码不能为空', icon: 'none' })
-					return
+			getRoleLabel,
+			fillDemoAccount() {
+				this.form.username = this.selectedRole === USER_ROLE_FAMILY ? 'family_demo' : 'vision_demo';
+				this.form.password = '123456';
+				if (this.mode === 'register') {
+					this.form.nickname = this.selectedRole === USER_ROLE_FAMILY ? '新家属账号' : '新视障账号';
 				}
-				if (this.mode === 'register' && !this.form.nickname) {
-					uni.showToast({ title: '昵称不能为空', icon: 'none' })
-					return
-				}
-
-				this.loading = true
-				const url = this.mode === 'login' ? `${this.apiBase}/api/auth/login` : `${this.apiBase}/api/auth/register`
-				const data = this.mode === 'login'
-					? {
-						username: this.form.username,
-						password: this.form.password
-					}
-					: {
-						username: this.form.username,
-						password: this.form.password,
-						nickname: this.form.nickname,
-						phone: this.form.phone,
-						email: this.form.email
-					}
-
-				uni.request({
-					url,
-					method: 'POST',
-					header: {
-						'Content-Type': 'application/json'
-					},
-					data,
-					success: (res: UniApp.RequestSuccessCallbackResult) => {
-						this.loading = false
-						if (res.statusCode !== 200) {
-							const response = res.data as { message?: string }
-							const msg = response && response.message ? response.message : '请求失败'
-							uni.showToast({ title: msg, icon: 'none' })
-							return
-						}
-						const user = res.data as AuthUser
-						this.userInfo = user
-						uni.setStorageSync('auth_user', user)
-						uni.showToast({ title: this.mode === 'login' ? '登录成功' : '注册成功', icon: 'success' })
-						setTimeout(() => {
-							uni.reLaunch({
-								url: '/pages/index/index'
-							})
-						}, 300)
-					},
-					fail: () => {
-						this.loading = false
-						uni.showToast({ title: '请求失败，请检查后端服务', icon: 'none' })
-					}
-				})
 			},
-			goBack() {
-				uni.navigateBack({
-					fail: () => {
-						uni.reLaunch({ url: '/pages/index/index' })
+			submit() {
+				const payload = {
+					...this.form,
+					role: this.selectedRole
+				};
+				this.loading = true;
+
+				setTimeout(() => {
+					const result = this.mode === 'login' ? loginWithMock(payload) : registerWithMock(payload);
+					this.loading = false;
+
+					if (!result.ok) {
+						uni.showToast({ title: result.message, icon: 'none' });
+						return;
 					}
-				})
+
+					this.userInfo = result.user;
+					uni.showToast({ title: this.mode === 'login' ? '登录成功' : '注册成功', icon: 'success' });
+					setTimeout(() => {
+						uni.reLaunch({
+							url: getDefaultRouteByRole(result.user.role)
+						});
+					}, 240);
+				}, 160);
 			}
 		}
-	})
+	});
 </script>
 
 <style>
@@ -283,31 +285,63 @@
 		font-size: 42rpx;
 	}
 
-	.brand-desc {
+	.brand-desc,
+	.role-desc,
+	.demo-line,
+	.line {
 		display: block;
-		max-width: 14em;
-		margin-top: 18rpx;
 		font-size: 28rpx;
 		line-height: 1.72;
 		color: #a9bfd7;
 	}
 
-	.brand-rail {
+	.role-showcase,
+	.form-stack {
 		display: grid;
-		grid-template-columns: repeat(2, minmax(0, 1fr));
 		gap: 14rpx;
+	}
+
+	.role-showcase {
 		margin-top: 30rpx;
 	}
 
+	.role-card,
 	.brand-rail-item,
-	.feature-item,
+	.demo-panel,
 	.result {
 		border-radius: 24rpx;
 		background: rgba(255, 255, 255, 0.04);
 		border: 1px solid rgba(255, 255, 255, 0.08);
 	}
 
-	.brand-rail-item {
+	.role-card {
+		padding: 24rpx;
+	}
+
+	.role-card-active {
+		background: linear-gradient(155deg, rgba(255, 212, 107, 0.16), rgba(135, 215, 255, 0.08));
+		border-color: rgba(255, 212, 107, 0.22);
+		box-shadow: 0 18rpx 40rpx rgba(255, 212, 107, 0.1);
+	}
+
+	.role-name,
+	.demo-title {
+		display: block;
+		font-size: 30rpx;
+		font-weight: bold;
+		color: #f3f8ff;
+	}
+
+	.brand-rail {
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		gap: 14rpx;
+		margin-top: 24rpx;
+	}
+
+	.brand-rail-item,
+	.demo-panel,
+	.result {
 		padding: 22rpx;
 	}
 
@@ -326,53 +360,60 @@
 		color: #f3f8ff;
 	}
 
-	.feature-list {
-		display: grid;
-		gap: 14rpx;
+	.demo-panel {
 		margin-top: 18rpx;
-	}
-
-	.feature-item {
-		padding: 22rpx 24rpx;
-		font-size: 26rpx;
-		line-height: 1.68;
-		color: #d6e5f5;
 	}
 
 	.panel-head {
 		margin-bottom: 24rpx;
 	}
 
-	.tabs {
+	.tabs,
+	.role-picker {
 		display: flex;
 		padding: 8rpx;
-		background: rgba(255, 255, 255, 0.04);
-		border: 1px solid rgba(255, 255, 255, 0.08);
 		border-radius: 999rpx;
-		margin-bottom: 22rpx;
 		overflow: hidden;
 	}
 
-	.tab {
+	.tabs {
+		background: rgba(255, 255, 255, 0.04);
+		border: 1px solid rgba(255, 255, 255, 0.08);
+		margin-bottom: 22rpx;
+	}
+
+	.role-picker {
+		gap: 10rpx;
+		background: rgba(255, 255, 255, 0.03);
+		border: 1px solid rgba(255, 255, 255, 0.06);
+		margin-bottom: 22rpx;
+	}
+
+	.tab,
+	.picker-chip {
 		flex: 1;
 		text-align: center;
 		padding: 18rpx 0;
 		border-radius: 999rpx;
-		color: #9ab4c9;
 		font-size: 28rpx;
 		transition: all 0.24s ease;
 	}
 
-	.active {
+	.tab {
+		color: #9ab4c9;
+	}
+
+	.active,
+	.picker-chip-active {
 		background: linear-gradient(135deg, #ffd46b, #fff0bc);
 		color: #13202f;
 		font-weight: bold;
 		box-shadow: 0 14rpx 34rpx rgba(255, 212, 107, 0.18);
 	}
 
-	.form-stack {
-		display: grid;
-		gap: 14rpx;
+	.picker-chip {
+		color: #d8e8f7;
+		background: rgba(255, 255, 255, 0.03);
 	}
 
 	.input {
@@ -416,13 +457,6 @@
 
 	.result {
 		margin-top: 20rpx;
-		padding: 18rpx 20rpx;
-	}
-
-	.line {
-		color: #b9d7ef;
-		font-size: 26rpx;
-		line-height: 1.6;
 	}
 
 	@media screen and (max-width: 720px) {
@@ -443,6 +477,14 @@
 		.auth-panel {
 			padding: 28rpx;
 			border-radius: 28rpx;
+		}
+
+		.role-picker {
+			flex-wrap: wrap;
+		}
+
+		.picker-chip {
+			min-width: 220rpx;
 		}
 	}
 </style>

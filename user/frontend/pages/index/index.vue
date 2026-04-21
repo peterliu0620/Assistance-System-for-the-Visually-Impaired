@@ -241,12 +241,12 @@
 	</view>
 </template>
 
-<script lang="ts">
+<script>
 	import { defineComponent } from 'vue';
 	import { API_BASE } from '../../utils/api';
 	import { loadUserSettings } from '../../utils/user-settings';
 	import AppTabBar from '../../components/app-tab-bar.vue';
-	import type { AuthUser, GestureAction, UserSettings } from '../../types/models';
+	import { getAuthUser, isVisionRole } from '../../utils/auth';
 
 	const TRACK_INTERVAL_MS = 1200
 
@@ -280,26 +280,26 @@
 		data() {
 			return {
 				loading: false,
-				result: null as any,
+				result: null,
 				apiBase: API_BASE,
-				audioPlayer: null as any,
-				cameraContext: null as any,
-				singleTapTimer: null as ReturnType<typeof setTimeout> | null,
-				trackingTimer: null as ReturnType<typeof setTimeout> | null,
+				audioPlayer: null,
+				cameraContext: null,
+				singleTapTimer: null,
+				trackingTimer: null,
 				lastLocation: {
 					latitude: null,
 					longitude: null,
 					locationText: ''
-				} as any,
+				},
 				knowledgeState: {
 					recentRecords: [],
 					todayScanCount: 0,
 					lastSessionId: uni.getStorageSync('knowledge_last_session_id') || '',
 					lastAnswer: '',
 					questionInput: ''
-				} as any,
-				settings: loadUserSettings() as UserSettings,
-				findModeState: createFindModeState() as any,
+				},
+				settings: loadUserSettings(),
+				findModeState: createFindModeState(),
 				debug: {
 					status: 'idle',
 					lastCommand: '',
@@ -307,7 +307,7 @@
 					lastStatusCode: '',
 					lastError: '',
 					logs: []
-				} as any
+				}
 			}
 		},
 		computed: {
@@ -392,8 +392,8 @@
 			refreshSettings() {
 				this.settings = loadUserSettings()
 			},
-			getCurrentUser(): AuthUser {
-				return (uni.getStorageSync('auth_user') || {}) as AuthUser
+			getCurrentUser() {
+				return getAuthUser()
 			},
 			getCurrentUserId() {
 				const user = this.getCurrentUser()
@@ -407,9 +407,15 @@
 					})
 					return false
 				}
+				if (!isVisionRole(user.role)) {
+					uni.reLaunch({
+						url: '/pages/family-center/family-center'
+					})
+					return false
+				}
 				return true
 			},
-			gestureActionLabel(action: GestureAction) {
+			gestureActionLabel(action) {
 				if (action === 'voice_trigger') return '语音触发识别'
 				if (action === 'direct_scan') return '直接拍照识别'
 				if (action === 'open_user_center') return '打开用户中心'
@@ -434,7 +440,7 @@
 				}
 				this.executeGestureAction(this.settings.gestureLongPress)
 			},
-			executeGestureAction(action: GestureAction) {
+			executeGestureAction(action) {
 				if (!this.ensureLoggedIn()) {
 					return
 				}
@@ -465,7 +471,7 @@
 				}
 				uni.vibrateLong()
 			},
-			performSuggestedHaptic(type: string) {
+			performSuggestedHaptic(type) {
 				if (type === 'LONG') {
 					uni.vibrateLong()
 					return
@@ -482,7 +488,7 @@
 				setTimeout(() => uni.vibrateLong(), 500)
 				setTimeout(() => uni.vibrateLong(), 1100)
 			},
-			pushDebugLog(message: string) {
+			pushDebugLog(message) {
 				const now = new Date()
 				const time = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`
 				const line = `[${time}] ${message}`
@@ -492,7 +498,7 @@
 					this.debug.logs.pop()
 				}
 			},
-			setDebugError(message: string) {
+			setDebugError(message) {
 				this.debug.lastError = message
 				console.error(`[VISION-DEBUG][ERROR] ${message}`)
 				this.pushDebugLog(`ERROR: ${message}`)
@@ -527,14 +533,14 @@
 					})
 				})
 			},
-			rememberSessionId(sessionId: string) {
+			rememberSessionId(sessionId) {
 				if (!sessionId) {
 					return
 				}
 				this.knowledgeState.lastSessionId = sessionId
 				uni.setStorageSync('knowledge_last_session_id', sessionId)
 			},
-			buildArchiveFormData(baseData: Record<string, string>, location: any) {
+			buildArchiveFormData(baseData, location) {
 				const payload = {
 					...baseData
 				}
@@ -615,7 +621,7 @@
 			cancelManualTarget() {
 				this.stopFindMode('idle')
 			},
-			parseTargetName(raw: string) {
+			parseTargetName(raw) {
 				const text = (raw || '').trim()
 				if (!text) {
 					return ''
@@ -630,7 +636,7 @@
 					.replace(/^找/, '')
 				return normalized || text
 			},
-			beginTracking(targetName: string) {
+			beginTracking(targetName) {
 				const now = Date.now()
 				const sessionId = `find-${now}`
 				this.findModeState = {
@@ -784,7 +790,7 @@
 					this.scheduleNextTrackingFrame(TRACK_INTERVAL_MS)
 				}
 			},
-			shouldSpeakGuidance(text: string) {
+			shouldSpeakGuidance(text) {
 				const normalized = (text || '').trim()
 				if (!normalized) {
 					return false
@@ -805,7 +811,7 @@
 				this.performSuggestedHaptic('LONG')
 				uni.showToast({ title: '已自动录入个人知识库', icon: 'none' })
 			},
-			stopFindMode(mode = 'idle', toastMessage?: string) {
+			stopFindMode(mode = 'idle', toastMessage) {
 				this.clearTrackingTimer()
 				const targetName = this.findModeState.targetName
 				this.findModeState = {
@@ -820,7 +826,7 @@
 					this.pushDebugLog(`已停止寻物：${targetName}`)
 				}
 			},
-			handleFindModeError(message: string) {
+			handleFindModeError(message) {
 				this.findModeState.mode = 'error'
 				this.findModeState.isTracking = false
 				this.findModeState.awaitingManualInput = false
@@ -844,7 +850,7 @@
 				this.pushDebugLog('语音触发识别：先播报提示，再自动拍照')
 				this.playGuideThenCapture(command)
 			},
-			playGuideThenCapture(command: string) {
+			playGuideThenCapture(command) {
 				const guide = '即将开始识别，请将目标放入画面后拍照。'
 				let spoken = false
 				if (typeof plus !== 'undefined') {
@@ -873,7 +879,7 @@
 					this.pickAndAnalyzeImage(command)
 				}, 600)
 			},
-			handleVoiceCommand(command: string) {
+			handleVoiceCommand(command) {
 				const normalized = (command || '').trim()
 				if (!normalized) {
 					this.setDebugError('未识别到有效语音指令')
@@ -900,7 +906,7 @@
 				this.triggerHaptic()
 				this.pickAndAnalyzeImage('这是什么？')
 			},
-			pickAndAnalyzeImage(command: string) {
+			pickAndAnalyzeImage(command) {
 				this.loading = true
 				this.debug.status = 'camera-opening'
 				this.pushDebugLog('打开相机拍照')
@@ -925,7 +931,7 @@
 					})
 				})
 			},
-			uploadForAnalyze(imagePath: string, command: string, location: any) {
+			uploadForAnalyze(imagePath, command, location) {
 				const sessionId = `analyze-${Date.now()}`
 				this.rememberSessionId(sessionId)
 				this.debug.status = 'uploading'
@@ -984,14 +990,14 @@
 					fail: (err) => {
 						this.loading = false
 						this.debug.status = 'upload-failed'
-						const detail = err && typeof err === 'object' && 'errMsg' in err ? String((err as { errMsg?: string }).errMsg || '') : ''
+						const detail = err && typeof err === 'object' && 'errMsg' in err ? String(err.errMsg || '') : ''
 						const message = detail ? `识别请求失败: ${detail}` : '识别请求失败，请确认后端已启动'
 						this.setDebugError(message)
 						uni.showToast({ title: '识别请求失败，请查看调试信息', icon: 'none' })
 					}
 				})
 			},
-			pickNarrationText(data: any) {
+			pickNarrationText(data) {
 				if (!data) {
 					return '识别完成'
 				}
@@ -1006,7 +1012,7 @@
 				}
 				return data.narration || '识别完成'
 			},
-			buildMedicineNarration(data: any) {
+			buildMedicineNarration(data) {
 				const summary = data && data.matchedMedicineProfileSummary
 				if (!summary) {
 					return ''
@@ -1031,7 +1037,7 @@
 				}
 				return parts.join('')
 			},
-			speak(text: string) {
+			speak(text) {
 				if (!text) {
 					return
 				}
@@ -1077,7 +1083,7 @@
 				this.pushDebugLog('当前环境无本地播报能力，切换云端 TTS')
 				this.playCloudTts(text)
 			},
-			playCloudTts(text: string) {
+			playCloudTts(text) {
 				uni.request({
 					url: `${this.apiBase}/api/voice/tts`,
 					method: 'POST',
@@ -1103,7 +1109,7 @@
 					}
 				})
 			},
-			playFromUrl(url: string) {
+			playFromUrl(url) {
 				if (!this.audioPlayer) {
 					this.audioPlayer = uni.createInnerAudioContext()
 					this.audioPlayer.autoplay = true

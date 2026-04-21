@@ -15,15 +15,9 @@
 	</view>
 </template>
 
-<script lang="ts">
+<script>
 	import { defineComponent } from 'vue';
-
-	interface TabBarItem {
-		key: string;
-		label: string;
-		icon: string;
-		url: string;
-	}
+	import { getAuthUser, isFamilyRole } from '../utils/auth';
 
 	export default defineComponent({
 		props: {
@@ -34,15 +28,26 @@
 		},
 		data() {
 			return {
-				items: [
+				visionItems: [
 					{ key: 'home', label: '识别', icon: '◎', url: '/pages/index/index' },
 					{ key: 'knowledge', label: '知识库', icon: '◌', url: '/pages/knowledge/knowledge' },
 					{ key: 'profile', label: '我的', icon: '◐', url: '/pages/user-center/user-center' }
-				] as TabBarItem[]
+				],
+				familyItems: [
+					{ key: 'family-home', label: '家属台', icon: '◉', url: '/pages/family-center/family-center' },
+					{ key: 'family-records', label: '记录', icon: '◍', url: '/pages/family-records/family-records' },
+					{ key: 'family-profile', label: '登记', icon: '◑', url: '/pages/family-profile/family-profile' }
+				]
+			}
+		},
+		computed: {
+			items() {
+				const user = getAuthUser();
+				return isFamilyRole(user.role) ? this.familyItems : this.visionItems;
 			}
 		},
 		methods: {
-			switchTo(item: TabBarItem) {
+			switchTo(item) {
 				if (!item || item.key === this.current) {
 					return
 				}

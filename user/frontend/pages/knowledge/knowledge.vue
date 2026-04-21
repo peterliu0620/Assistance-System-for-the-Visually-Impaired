@@ -110,19 +110,12 @@
 	</view>
 </template>
 
-<script lang="ts">
+<script>
 	import { defineComponent } from 'vue';
 	import { API_BASE } from '../../utils/api';
 	import { loadUserSettings } from '../../utils/user-settings';
 	import AppTabBar from '../../components/app-tab-bar.vue';
-	import type { AuthUser, KnowledgeRecord, UserSettings } from '../../types/models';
-
-	interface KnowledgeState {
-		todayScanCount: number;
-		latestSessionId: string;
-		lastAnswer: string;
-		records: KnowledgeRecord[];
-	}
+	import { getAuthUser, isFamilyRole } from '../../utils/auth';
 
 	export default defineComponent({
 		components: {
@@ -130,7 +123,7 @@
 		},
 		data() {
 			return {
-				settings: loadUserSettings() as UserSettings,
+				settings: loadUserSettings(),
 				asking: false,
 				questionInput: '',
 				knowledge: {
@@ -138,7 +131,7 @@
 					latestSessionId: '',
 					lastAnswer: '',
 					records: []
-				} as KnowledgeState,
+				},
 				apiBase: API_BASE
 			}
 		},
@@ -151,9 +144,13 @@
 			}
 		},
 		onLoad() {
-			const user = uni.getStorageSync('auth_user') as AuthUser
+			const user = getAuthUser()
 			if (!user || !user.id) {
 				uni.reLaunch({ url: '/pages/auth/auth' })
+				return
+			}
+			if (isFamilyRole(user.role)) {
+				uni.reLaunch({ url: '/pages/family-records/family-records' })
 				return
 			}
 			this.refreshRecords()
@@ -163,10 +160,10 @@
 			this.refreshRecords()
 		},
 		methods: {
-			getCurrentUser(): AuthUser {
-				return (uni.getStorageSync('auth_user') || {}) as AuthUser
+			getCurrentUser() {
+				return getAuthUser()
 			},
-			formatTime(value?: string) {
+			formatTime(value) {
 				if (!value) {
 					return '-'
 				}
@@ -184,12 +181,12 @@
 						userId: user.id,
 						limit: 8
 					},
-					success: (res: UniApp.RequestSuccessCallbackResult) => {
+					success: (res) => {
 						if (res.statusCode !== 200 || !res.data) {
 							uni.showToast({ title: '加载知识库失败', icon: 'none' })
 							return
 						}
-						const response = res.data as Partial<KnowledgeState>
+						const response = res.data || {}
 						this.knowledge.todayScanCount = response.todayScanCount || 0
 						this.knowledge.latestSessionId = response.latestSessionId || uni.getStorageSync('knowledge_last_session_id') || ''
 						this.knowledge.records = response.records || []
@@ -218,13 +215,13 @@
 						question,
 						sessionId: this.knowledge.latestSessionId || uni.getStorageSync('knowledge_last_session_id') || ''
 					},
-					success: (res: UniApp.RequestSuccessCallbackResult) => {
+					success: (res) => {
 						this.asking = false
 						if (res.statusCode !== 200 || !res.data) {
 							uni.showToast({ title: '提问失败', icon: 'none' })
 							return
 						}
-						const response = res.data as { answer?: string; usedSessionId?: string }
+						const response = res.data || {}
 						this.knowledge.lastAnswer = response.answer || ''
 						if (response.usedSessionId) {
 							this.knowledge.latestSessionId = response.usedSessionId

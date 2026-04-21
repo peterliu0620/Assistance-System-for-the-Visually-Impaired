@@ -13,6 +13,7 @@
 				<view class="hero-actions">
 					<button class="action-btn primary" @click="save">保存设置</button>
 					<button class="action-btn ghost" @click="backToHome">返回首页</button>
+					<button class="action-btn danger" @click="logout">退出登录</button>
 				</view>
 			</view>
 
@@ -149,16 +150,11 @@
 	</view>
 </template>
 
-<script lang="ts">
+<script>
 	import { defineComponent } from 'vue';
 	import { loadUserSettings, saveUserSettings } from '../../utils/user-settings';
 	import AppTabBar from '../../components/app-tab-bar.vue';
-	import type { AuthUser, BroadcastGranularity, ContrastMode, GestureAction, UserSettings } from '../../types/models';
-
-	interface OptionItem<T> {
-		label: string;
-		value: T;
-	}
+	import { clearAuthUser, getAuthUser, isFamilyRole } from '../../utils/auth';
 
 	export default defineComponent({
 		components: {
@@ -170,28 +166,32 @@
 					{ label: '柔和女声 Cherry', value: 'Cherry' },
 					{ label: '沉稳男声 Ethan', value: 'Ethan' },
 					{ label: '清晰女声 Serena', value: 'Serena' }
-				] as Array<OptionItem<string>>,
+				],
 				granularityOptions: [
 					{ label: '简洁', value: 'concise' },
 					{ label: '详细', value: 'detailed' }
-				] as Array<OptionItem<BroadcastGranularity>>,
+				],
 				gestureOptions: [
 					{ label: '无动作', value: 'none' },
 					{ label: '语音触发识别', value: 'voice_trigger' },
 					{ label: '直接拍照识别', value: 'direct_scan' },
 					{ label: '打开用户中心', value: 'open_user_center' }
-				] as Array<OptionItem<GestureAction>>,
+				],
 				contrastOptions: [
 					{ label: '黑金模式', value: 'black-gold' },
 					{ label: '黑黄模式', value: 'black-yellow' }
-				] as Array<OptionItem<ContrastMode>>,
-				form: loadUserSettings() as UserSettings
+				],
+				form: loadUserSettings()
 			}
 		},
 		onLoad() {
-			const user = uni.getStorageSync('auth_user') as AuthUser
+			const user = getAuthUser()
 			if (!user || !user.id) {
 				uni.reLaunch({ url: '/pages/auth/auth' })
+				return
+			}
+			if (isFamilyRole(user.role)) {
+				uni.reLaunch({ url: '/pages/family-center/family-center' })
 			}
 		},
 		computed: {
@@ -226,25 +226,25 @@
 			}
 		},
 		methods: {
-			onRateChange(e: { detail: { value: number } }) {
+			onRateChange(e) {
 				this.form.speechRate = Number((e.detail.value / 100).toFixed(2))
 			},
-			onVoiceChange(e: { detail: { value: number } }) {
+			onVoiceChange(e) {
 				this.form.voiceTimbre = this.voiceOptions[e.detail.value].value
 			},
-			onGranularityChange(e: { detail: { value: number } }) {
+			onGranularityChange(e) {
 				this.form.broadcastGranularity = this.granularityOptions[e.detail.value].value
 			},
-			onGestureChange(field: 'gestureSingleTap' | 'gestureDoubleTap' | 'gestureLongPress', e: { detail: { value: number } }) {
+			onGestureChange(field, e) {
 				this.form[field] = this.gestureOptions[e.detail.value].value
 			},
-			onHapticChange(e: { detail: { value: number } }) {
+			onHapticChange(e) {
 				this.form.hapticLevel = Number(e.detail.value)
 			},
-			onContrastChange(e: { detail: { value: number } }) {
+			onContrastChange(e) {
 				this.form.contrastMode = this.contrastOptions[e.detail.value].value
 			},
-			onLargeTextChange(e: { detail: { value: boolean } }) {
+			onLargeTextChange(e) {
 				this.form.extraLargeText = !!e.detail.value
 			},
 			testHaptic() {
@@ -278,6 +278,21 @@
 					url: '/pages/index/index',
 					fail: () => {
 						uni.reLaunch({ url: '/pages/index/index' })
+					}
+				})
+			},
+			logout() {
+				uni.showModal({
+					title: '退出登录',
+					content: '确认退出当前账号吗？',
+					success: (res) => {
+						if (!res.confirm) {
+							return
+						}
+						clearAuthUser()
+						uni.reLaunch({
+							url: '/pages/auth/auth'
+						})
 					}
 				})
 			}
@@ -331,6 +346,12 @@
 	.compact-btn {
 		margin-top: 16rpx;
 		min-width: 0;
+	}
+
+	.action-btn.danger {
+		background: rgba(255, 107, 107, 0.14);
+		color: #ffd7d7;
+		border: 1px solid rgba(255, 107, 107, 0.28);
 	}
 
 	.font-large .label,

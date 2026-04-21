@@ -23,6 +23,24 @@
 			"style": {
 				"navigationBarTitleText": "智能知识库"
 			}
+		},
+		{
+			"path": "pages/family-center/family-center",
+			"style": {
+				"navigationBarTitleText": "家属中心"
+			}
+		},
+		{
+			"path": "pages/family-records/family-records",
+			"style": {
+				"navigationBarTitleText": "识别记录"
+			}
+		},
+		{
+			"path": "pages/family-profile/family-profile",
+			"style": {
+				"navigationBarTitleText": "信息登记"
+			}
 		}
 	],
 	"globalStyle": {
@@ -30,5 +48,6 @@
 		"navigationBarTitleText": "智能视觉辅助",
 		"navigationBarBackgroundColor": "#F8F8F8",
 		"backgroundColor": "#F8F8F8"
-	}
+	},
+	"uniIdRouter": {}
 }
