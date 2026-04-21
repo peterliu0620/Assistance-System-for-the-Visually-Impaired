@@ -56,8 +56,8 @@ Thumbs.db
 .env.*.local
 
 # Local backend config
-user/backend/src/main/resources/application.properties
+# user/backend/src/main/resources/application.properties
 
 # Local frontend API config
-user/frontend/utils/api.ts
-issue.md
+# user/frontend/utils/api.ts、
+# issue.md

@@ -1,13 +1,8 @@
 import { expect, test } from '@playwright/test'
 
-test('renders the minimal H5 base and handles a click', async ({ page }) => {
+test('renders the real uni-app home page', async ({ page }) => {
   await page.goto('/')
 
-  await expect(page.getByTestId('app-title')).toHaveText('user/frontend 最小测试基座')
-  await expect(page.getByTestId('runtime-label')).toHaveText('uni-app H5')
-  await expect(page.getByTestId('counter-value')).toHaveText('0')
-
-  await page.getByTestId('increment-button').click()
-
-  await expect(page.getByTestId('counter-value')).toHaveText('1')
+  await expect(page.getByText('智能视觉辅助')).toBeVisible()
+  await expect(page.getByText('把识别、寻物和安全提醒放进一个更清晰的入口')).toBeVisible()
 })
