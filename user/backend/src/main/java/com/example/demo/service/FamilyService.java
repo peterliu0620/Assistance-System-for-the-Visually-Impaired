@@ -1,5 +1,6 @@
 package com.example.demo.service;
 
+import com.example.demo.dto.FamilyBindVisionRequest;
 import com.example.demo.dto.FamilyDashboardResponse;
 import com.example.demo.dto.FamilyProfileRequest;
 import com.example.demo.dto.FamilyProfileResponse;
@@ -36,23 +37,23 @@ public class FamilyService {
     private final MedicineSafetyMapper medicineSafetyMapper;
 
     @Transactional(readOnly = true)
-    public FamilyDashboardResponse getDashboard(Long familyUserId) {
+    public FamilyDashboardResponse getDashboard(Long familyUserId, Long visionUserId) {
         SysUser familyUser = requireFamilyUser(familyUserId);
-        Long visionUserId = resolveVisionUserId(familyUser.getId());
-        SysUser visionUser = visionUserId == null ? null : sysUserMapper.findById(visionUserId);
-        int todayCount = visionUserId == null ? 0 : knowledgeMapper.countRecordsBetween(
-                visionUserId,
+        Long selectedVisionUserId = resolveVisionUserId(familyUser.getId(), visionUserId);
+        SysUser visionUser = selectedVisionUserId == null ? null : sysUserMapper.findById(selectedVisionUserId);
+        int todayCount = selectedVisionUserId == null ? 0 : knowledgeMapper.countRecordsBetween(
+                selectedVisionUserId,
                 LocalDate.now().atStartOfDay(),
                 LocalDateTime.of(LocalDate.now(), LocalTime.MAX)
         );
-        int recordsCount = visionUserId == null ? 0 : knowledgeMapper.findRecentRecords(visionUserId, 20).size();
-        int riskCount = visionUserId == null ? 0 : medicineSafetyMapper.countAlertsByUserId(visionUserId);
-        String recentRiskText = visionUserId == null ? "当前家人账号尚未关联视障人士。"
-                : defaultString(medicineSafetyMapper.findLatestAlertMessageByUserId(visionUserId), "当前暂无新的风险提醒。");
-        int completedSections = countCompletedSections(visionUserId == null ? null : familyMapper.findProfileByUserId(visionUserId));
+        int recordsCount = selectedVisionUserId == null ? 0 : knowledgeMapper.findRecentRecords(selectedVisionUserId, 20).size();
+        int riskCount = selectedVisionUserId == null ? 0 : medicineSafetyMapper.countAlertsByUserId(selectedVisionUserId);
+        String recentRiskText = selectedVisionUserId == null ? "当前家人账号尚未关联视障人士。"
+                : defaultString(medicineSafetyMapper.findLatestAlertMessageByUserId(selectedVisionUserId), "当前暂无新的风险提醒。");
+        int completedSections = countCompletedSections(selectedVisionUserId == null ? null : familyMapper.findProfileByUserId(selectedVisionUserId));
         return new FamilyDashboardResponse(
-                visionUserId,
-                visionUser == null ? "" : visionUser.getNickname(),
+                selectedVisionUserId,
+                visionUser == null ? "" : defaultString(visionUser.getNickname(), defaultString(visionUser.getUsername(), "")),
                 todayCount,
                 riskCount,
                 recordsCount,
@@ -62,37 +63,40 @@ public class FamilyService {
     }
 
     @Transactional(readOnly = true)
-    public List<FamilyRecordResponse> listRecords(Long familyUserId, Integer limit) {
+    public List<FamilyRecordResponse> listRecords(Long familyUserId, Long visionUserId, Integer limit) {
         requireFamilyUser(familyUserId);
-        Long visionUserId = resolveVisionUserId(familyUserId);
-        if (visionUserId == null) {
+        Long selectedVisionUserId = resolveVisionUserId(familyUserId, visionUserId);
+        if (selectedVisionUserId == null) {
             return List.of();
         }
         int safeLimit = Math.max(1, Math.min(limit == null ? 10 : limit, 20));
-        return knowledgeMapper.findRecentRecords(visionUserId, safeLimit).stream()
+        return knowledgeMapper.findRecentRecords(selectedVisionUserId, safeLimit).stream()
                 .map(this::toFamilyRecordResponse)
                 .toList();
     }
 
     @Transactional(readOnly = true)
-    public FamilyProfileResponse getProfile(Long familyUserId) {
+    public FamilyProfileResponse getProfile(Long familyUserId, Long visionUserId) {
         requireFamilyUser(familyUserId);
-        Long visionUserId = resolveVisionUserId(familyUserId);
-        if (visionUserId == null) {
-            return new FamilyProfileResponse();
+        List<FamilyUserBinding> bindings = familyMapper.findBindingsByFamilyUserId(familyUserId);
+        Long selectedVisionUserId = resolveVisionUserId(bindings, visionUserId);
+        if (selectedVisionUserId == null) {
+            return emptyProfileResponse(bindings);
         }
-        return toProfileResponse(familyMapper.findProfileByUserId(visionUserId));
+        FamilyUserBinding binding = findBinding(bindings, selectedVisionUserId);
+        return toProfileResponse(selectedVisionUserId, familyMapper.findProfileByUserId(selectedVisionUserId), binding, bindings);
     }
 
     @Transactional
-    public FamilyProfileResponse saveProfile(Long familyUserId, FamilyProfileRequest request) {
+    public FamilyProfileResponse saveProfile(Long familyUserId, Long visionUserId, FamilyProfileRequest request) {
         requireFamilyUser(familyUserId);
-        Long visionUserId = resolveVisionUserId(familyUserId);
-        if (visionUserId == null) {
+        List<FamilyUserBinding> bindings = familyMapper.findBindingsByFamilyUserId(familyUserId);
+        Long selectedVisionUserId = resolveVisionUserId(bindings, visionUserId);
+        if (selectedVisionUserId == null) {
             throw new IllegalArgumentException("当前家人账号尚未关联视障人士");
         }
         UserCareProfile profile = new UserCareProfile();
-        profile.setUserId(visionUserId);
+        profile.setUserId(selectedVisionUserId);
         profile.setSubjectName(trim(request.getBasicInfo().getName()));
         profile.setGender(trim(request.getBasicInfo().getGender()));
         profile.setAge(trim(request.getBasicInfo().getAge()));
@@ -108,7 +112,31 @@ public class FamilyService {
         profile.setAllergy(trim(request.getHealthInfo().getAllergy()));
         profile.setReminder(trim(request.getHealthInfo().getReminder()));
         familyMapper.upsertProfile(profile);
-        return toProfileResponse(familyMapper.findProfileByUserId(visionUserId));
+        FamilyUserBinding binding = findBinding(bindings, selectedVisionUserId);
+        return toProfileResponse(selectedVisionUserId, familyMapper.findProfileByUserId(selectedVisionUserId), binding, bindings);
+    }
+
+    @Transactional
+    public FamilyProfileResponse bindVisionUser(Long familyUserId, FamilyBindVisionRequest request) {
+        requireFamilyUser(familyUserId);
+        String visionUsername = request == null ? null : trim(request.getVisionUsername());
+        if (visionUsername == null) {
+            throw new IllegalArgumentException("视障人士账号不能为空");
+        }
+        SysUser visionUser = sysUserMapper.findByUsername(visionUsername);
+        if (visionUser == null || !AuthService.ROLE_VISION.equals(visionUser.getRole())) {
+            throw new IllegalArgumentException("未找到对应的视障人士账号");
+        }
+
+        FamilyUserBinding binding = new FamilyUserBinding();
+        binding.setFamilyUserId(familyUserId);
+        binding.setVisionUserId(visionUser.getId());
+        binding.setRelationship(defaultString(trim(request.getRelationship()), "家人"));
+        familyMapper.upsertBinding(binding);
+
+        List<FamilyUserBinding> bindings = familyMapper.findBindingsByFamilyUserId(familyUserId);
+        FamilyUserBinding selectedBinding = findBinding(bindings, visionUser.getId());
+        return toProfileResponse(visionUser.getId(), familyMapper.findProfileByUserId(visionUser.getId()), selectedBinding, bindings);
     }
 
     private SysUser requireFamilyUser(Long familyUserId) {
@@ -125,23 +153,32 @@ public class FamilyService {
         return user;
     }
 
-    private Long resolveVisionUserId(Long familyUserId) {
-        FamilyUserBinding existing = familyMapper.findBindingByFamilyUserId(familyUserId);
-        if (existing != null) {
-            return existing.getVisionUserId();
+    private Long resolveVisionUserId(Long familyUserId, Long requestedVisionUserId) {
+        return resolveVisionUserId(familyMapper.findBindingsByFamilyUserId(familyUserId), requestedVisionUserId);
+    }
+
+    private Long resolveVisionUserId(List<FamilyUserBinding> bindings, Long requestedVisionUserId) {
+        if (bindings == null || bindings.isEmpty()) {
+            return null;
         }
-        if (sysUserMapper.countByRole(AuthService.ROLE_VISION) == 1) {
-            Long visionUserId = sysUserMapper.findFirstIdByRole(AuthService.ROLE_VISION);
-            if (visionUserId != null) {
-                FamilyUserBinding binding = new FamilyUserBinding();
-                binding.setFamilyUserId(familyUserId);
-                binding.setVisionUserId(visionUserId);
-                binding.setRelationship("家人");
-                familyMapper.insertBinding(binding);
-            }
-            return visionUserId;
+        if (requestedVisionUserId == null) {
+            return bindings.get(0).getVisionUserId();
         }
-        return null;
+        FamilyUserBinding binding = findBinding(bindings, requestedVisionUserId);
+        if (binding == null) {
+            throw new IllegalArgumentException("未找到对应的绑定视障人士");
+        }
+        return binding.getVisionUserId();
+    }
+
+    private FamilyUserBinding findBinding(List<FamilyUserBinding> bindings, Long visionUserId) {
+        if (bindings == null || visionUserId == null) {
+            return null;
+        }
+        return bindings.stream()
+                .filter(item -> visionUserId.equals(item.getVisionUserId()))
+                .findFirst()
+                .orElse(null);
     }
 
     private FamilyRecordResponse toFamilyRecordResponse(ScanRecord record) {
@@ -166,11 +203,33 @@ public class FamilyService {
         );
     }
 
-    private FamilyProfileResponse toProfileResponse(UserCareProfile profile) {
+    private FamilyProfileResponse emptyProfileResponse(List<FamilyUserBinding> bindings) {
+        return new FamilyProfileResponse(
+                toBindingInfos(bindings),
+                new FamilyProfileResponse.BindingInfo(),
+                new FamilyProfileResponse.BasicInfo(),
+                new FamilyProfileResponse.EmergencyContact(),
+                new FamilyProfileResponse.HealthInfo()
+        );
+    }
+
+    private FamilyProfileResponse toProfileResponse(Long visionUserId,
+                                                    UserCareProfile profile,
+                                                    FamilyUserBinding binding,
+                                                    List<FamilyUserBinding> bindings) {
+        FamilyProfileResponse.BindingInfo currentBindingInfo = toBindingInfo(visionUserId, binding);
         if (profile == null) {
-            return new FamilyProfileResponse();
+            return new FamilyProfileResponse(
+                    toBindingInfos(bindings),
+                    currentBindingInfo,
+                    new FamilyProfileResponse.BasicInfo(),
+                    new FamilyProfileResponse.EmergencyContact(),
+                    new FamilyProfileResponse.HealthInfo()
+            );
         }
         return new FamilyProfileResponse(
+                toBindingInfos(bindings),
+                currentBindingInfo,
                 new FamilyProfileResponse.BasicInfo(
                         defaultString(profile.getSubjectName(), ""),
                         defaultString(profile.getGender(), ""),
@@ -191,6 +250,25 @@ public class FamilyService {
                         defaultString(profile.getAllergy(), ""),
                         defaultString(profile.getReminder(), "")
                 )
+        );
+    }
+
+    private List<FamilyProfileResponse.BindingInfo> toBindingInfos(List<FamilyUserBinding> bindings) {
+        if (bindings == null || bindings.isEmpty()) {
+            return List.of();
+        }
+        return bindings.stream()
+                .map(item -> toBindingInfo(item.getVisionUserId(), item))
+                .toList();
+    }
+
+    private FamilyProfileResponse.BindingInfo toBindingInfo(Long visionUserId, FamilyUserBinding binding) {
+        SysUser visionUser = visionUserId == null ? null : sysUserMapper.findById(visionUserId);
+        return new FamilyProfileResponse.BindingInfo(
+                visionUserId,
+                visionUser == null ? "" : defaultString(visionUser.getUsername(), ""),
+                visionUser == null ? "" : defaultString(visionUser.getNickname(), ""),
+                binding == null ? "" : defaultString(binding.getRelationship(), "家人")
         );
     }
 

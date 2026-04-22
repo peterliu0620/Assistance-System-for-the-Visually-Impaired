@@ -4,46 +4,11 @@
 		<view class="auth-glow auth-glow-two"></view>
 		<view class="auth-grid"></view>
 
-		<view class="auth-shell">
-			<view class="brand-column">
-				<text class="brand-eyebrow">Vision Guide</text>
-				<text class="brand-title">同一入口，切换两种照护视角</text>
-				<text class="brand-desc">视障人士进入识别工作台，家人进入记录与登记中心。现在登录和登记都直接走后端接口，不再依赖本地 mock 数据。</text>
-
-				<view class="role-showcase">
-					<view
-						v-for="item in roleOptions"
-						:key="item.value"
-						:class="['role-card', selectedRole === item.value ? 'role-card-active' : '']"
-						@click="selectedRole = item.value"
-					>
-						<text class="role-name">{{ item.label }}</text>
-						<text class="role-desc">{{ item.desc }}</text>
-					</view>
-				</view>
-
-				<view class="brand-rail">
-					<view class="brand-rail-item">
-						<text class="brand-rail-label">当前身份</text>
-						<text class="brand-rail-value">{{ currentRoleLabel }}</text>
-					</view>
-					<view class="brand-rail-item">
-						<text class="brand-rail-label">进入后首页</text>
-						<text class="brand-rail-value">{{ selectedRole === USER_ROLE_FAMILY ? '家属中心' : '识别首页' }}</text>
-					</view>
-				</view>
-
-				<view class="demo-panel">
-					<text class="demo-title">当前流程说明</text>
-					<text class="demo-line">请先注册对应身份，再使用账号密码登录。</text>
-					<text class="demo-line">家人身份会自动尝试关联唯一的视障人士账号，方便先跑通首版流程。</text>
-				</view>
-			</view>
-
+		<view class="auth-shell auth-shell-simple">
 			<view class="auth-panel">
 				<view class="panel-head">
-					<text class="panel-kicker">身份登录</text>
-					<text class="panel-title">{{ mode === 'login' ? '先选择身份，再进入对应工作区' : '创建当前身份下的新账号' }}</text>
+					<text class="panel-kicker">Auth</text>
+					<text class="panel-title">{{ mode === 'login' ? '登录' : '注册' }}</text>
 				</view>
 
 				<view class="tabs">
@@ -78,11 +43,6 @@
 						{{ mode === 'login' ? '切换到注册' : '切换到登录' }}
 					</button>
 				</view>
-
-				<view class="result" v-if="userInfo && userInfo.id">
-					<text class="line">当前用户：{{ userInfo.nickname }}（{{ userInfo.username }}）</text>
-					<text class="line">身份：{{ getRoleLabel(userInfo.role) }}</text>
-				</view>
 			</view>
 		</view>
 	</view>
@@ -106,7 +66,6 @@
 			return {
 				mode: 'login',
 				loading: false,
-				userInfo: null,
 				roleOptions: ROLE_OPTIONS,
 				selectedRole: USER_ROLE_VISION,
 				form: {
@@ -128,7 +87,6 @@
 		onLoad() {
 			const cached = getAuthUser();
 			if (cached && cached.id) {
-				this.userInfo = cached;
 				uni.reLaunch({
 					url: getDefaultRouteByRole(cached.role)
 				});
@@ -156,11 +114,11 @@
 							uni.showToast({ title: data.message || '请求失败', icon: 'none' });
 							return;
 						}
-						this.userInfo = saveAuthUser(res.data || {});
+						const userInfo = saveAuthUser(res.data || {});
 						uni.showToast({ title: this.mode === 'login' ? '登录成功' : '注册成功', icon: 'success' });
 						setTimeout(() => {
 							uni.reLaunch({
-								url: getDefaultRouteByRole(this.userInfo.role)
+								url: getDefaultRouteByRole(userInfo.role)
 							});
 						}, 240);
 					},
@@ -232,6 +190,11 @@
 		align-items: stretch;
 	}
 
+	.auth-shell-simple {
+		grid-template-columns: minmax(0, 720rpx);
+		justify-content: center;
+	}
+
 	.brand-column,
 	.auth-panel {
 		border-radius: 30rpx;
@@ -269,11 +232,6 @@
 		color: #173355;
 	}
 
-	.brand-title {
-		max-width: 11em;
-		font-size: 60rpx;
-	}
-
 	.panel-title {
 		font-size: 42rpx;
 	}
@@ -294,10 +252,6 @@
 		gap: 14rpx;
 	}
 
-	.role-showcase {
-		margin-top: 30rpx;
-	}
-
 	.role-card,
 	.brand-rail-item,
 	.demo-panel,
@@ -306,56 +260,6 @@
 		background: linear-gradient(180deg, rgba(255, 255, 255, 0.8), rgba(245, 249, 255, 0.72));
 		border: 1px solid rgba(255, 255, 255, 0.84);
 		box-shadow: 0 16rpx 40rpx rgba(79, 118, 172, 0.08);
-	}
-
-	.role-card {
-		padding: 24rpx;
-	}
-
-	.role-card-active {
-		background: linear-gradient(135deg, rgba(236, 244, 255, 0.96), rgba(255, 255, 255, 0.94));
-		border-color: rgba(193, 220, 255, 0.92);
-		box-shadow: 0 20rpx 46rpx rgba(76, 141, 255, 0.12);
-	}
-
-	.role-name,
-	.demo-title {
-		display: block;
-		font-size: 30rpx;
-		font-weight: bold;
-		color: #173355;
-	}
-
-	.brand-rail {
-		display: grid;
-		grid-template-columns: repeat(2, minmax(0, 1fr));
-		gap: 14rpx;
-		margin-top: 24rpx;
-	}
-
-	.brand-rail-item,
-	.demo-panel,
-	.result {
-		padding: 22rpx;
-	}
-
-	.brand-rail-label {
-		display: block;
-		font-size: 22rpx;
-		color: #7b8da8;
-	}
-
-	.brand-rail-value {
-		display: block;
-		margin-top: 10rpx;
-		font-size: 30rpx;
-		line-height: 1.45;
-		font-weight: bold;
-		color: #173355;
-	}
-
-	.demo-panel {
-		margin-top: 18rpx;
 	}
 
 	.panel-head {
@@ -450,18 +354,10 @@
 		margin-top: 22rpx;
 	}
 
-	.result {
-		margin-top: 20rpx;
-	}
-
 	@media screen and (max-width: 720px) {
 		.auth-shell,
-		.brand-rail {
+		.auth-shell-simple {
 			grid-template-columns: 1fr;
-		}
-
-		.brand-title {
-			font-size: 52rpx;
 		}
 
 		.panel-title {

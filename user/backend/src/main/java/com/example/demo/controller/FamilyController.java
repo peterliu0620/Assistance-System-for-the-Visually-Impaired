@@ -1,6 +1,7 @@
 package com.example.demo.controller;
 
 import com.example.demo.dto.FamilyDashboardResponse;
+import com.example.demo.dto.FamilyBindVisionRequest;
 import com.example.demo.dto.FamilyProfileRequest;
 import com.example.demo.dto.FamilyProfileResponse;
 import com.example.demo.dto.FamilyRecordResponse;
@@ -25,24 +26,34 @@ public class FamilyController {
     private final FamilyService familyService;
 
     @GetMapping("/dashboard")
-    public FamilyDashboardResponse dashboard(@RequestParam Long familyUserId) {
-        return familyService.getDashboard(familyUserId);
+    public FamilyDashboardResponse dashboard(@RequestParam Long familyUserId,
+                                             @RequestParam(required = false) Long visionUserId) {
+        return familyService.getDashboard(familyUserId, visionUserId);
     }
 
     @GetMapping("/records")
     public List<FamilyRecordResponse> records(@RequestParam Long familyUserId,
+                                              @RequestParam(required = false) Long visionUserId,
                                               @RequestParam(defaultValue = "10") Integer limit) {
-        return familyService.listRecords(familyUserId, limit);
+        return familyService.listRecords(familyUserId, visionUserId, limit);
     }
 
     @GetMapping("/profile")
-    public FamilyProfileResponse profile(@RequestParam Long familyUserId) {
-        return familyService.getProfile(familyUserId);
+    public FamilyProfileResponse profile(@RequestParam Long familyUserId,
+                                         @RequestParam(required = false) Long visionUserId) {
+        return familyService.getProfile(familyUserId, visionUserId);
+    }
+
+    @PostMapping("/bind-vision")
+    public FamilyProfileResponse bindVision(@RequestParam Long familyUserId,
+                                            @RequestBody FamilyBindVisionRequest request) {
+        return familyService.bindVisionUser(familyUserId, request);
     }
 
     @PostMapping("/profile")
     public FamilyProfileResponse saveProfile(@RequestParam Long familyUserId,
+                                             @RequestParam(required = false) Long visionUserId,
                                              @RequestBody FamilyProfileRequest request) {
-        return familyService.saveProfile(familyUserId, request);
+        return familyService.saveProfile(familyUserId, visionUserId, request);
     }
 }

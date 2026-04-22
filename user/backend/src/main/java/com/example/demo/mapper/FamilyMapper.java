@@ -8,6 +8,8 @@ import org.apache.ibatis.annotations.Options;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
 
+import java.util.List;
+
 @Mapper
 public interface FamilyMapper {
 
@@ -15,9 +17,19 @@ public interface FamilyMapper {
             select id, family_user_id, vision_user_id, relationship, created_at
             from family_user_binding
             where family_user_id = #{familyUserId}
+            order by created_at asc, id asc
+            """)
+    List<FamilyUserBinding> findBindingsByFamilyUserId(@Param("familyUserId") Long familyUserId);
+
+    @Select("""
+            select id, family_user_id, vision_user_id, relationship, created_at
+            from family_user_binding
+            where family_user_id = #{familyUserId}
+              and vision_user_id = #{visionUserId}
             limit 1
             """)
-    FamilyUserBinding findBindingByFamilyUserId(@Param("familyUserId") Long familyUserId);
+    FamilyUserBinding findBindingByFamilyAndVisionUserId(@Param("familyUserId") Long familyUserId,
+                                                         @Param("visionUserId") Long visionUserId);
 
     @Insert("""
             insert into family_user_binding(family_user_id, vision_user_id, relationship, created_at)
@@ -25,6 +37,14 @@ public interface FamilyMapper {
             """)
     @Options(useGeneratedKeys = true, keyProperty = "id")
     int insertBinding(FamilyUserBinding binding);
+
+    @Insert("""
+            insert into family_user_binding(family_user_id, vision_user_id, relationship, created_at)
+            values(#{familyUserId}, #{visionUserId}, #{relationship}, now())
+            on duplicate key update
+                relationship = values(relationship)
+            """)
+    int upsertBinding(FamilyUserBinding binding);
 
     @Select("""
             select id, user_id, subject_name, gender, age, vision_level, address, notes,

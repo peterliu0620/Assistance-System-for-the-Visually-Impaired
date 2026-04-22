@@ -8,7 +8,7 @@
 			<view class="hero-copy">
 				<text class="eyebrow">Family Records</text>
 				<text class="hero-title">按家属视角回看最近识别记录与风险提醒</text>
-				<text class="hero-desc">这里直接读取后端记录接口，展示识别时间、摘要、场景名、位置备注和风险提醒。</text>
+				<text class="hero-desc">可在多位视障人士之间切换，查看当前对象的识别时间、摘要、场景名、位置备注和风险提醒。</text>
 
 				<view class="hero-actions">
 					<button class="action-btn primary" @click="refreshRecords">刷新记录</button>
@@ -34,6 +34,20 @@
 					<text class="stat-value stat-value-small">{{ latestLocation }}</text>
 				</view>
 			</view>
+		</view>
+
+		<view class="section-panel" v-if="bindings.length">
+			<view class="section-head">
+				<view>
+					<text class="section-kicker">切换对象</text>
+					<text class="section-title">当前查看记录的视障人士</text>
+				</view>
+				<text class="section-tag">已绑定 {{ bindings.length }} 位</text>
+			</view>
+
+			<picker class="binding-picker" :range="bindingLabels" :value="activeBindingIndex" @change="onBindingChange">
+				<view class="picker-value">{{ activeBindingLabel }}</view>
+			</picker>
 		</view>
 
 		<view class="section-panel">
@@ -95,6 +109,7 @@
 	import AppTabBar from '../../components/app-tab-bar.vue';
 	import { API_BASE } from '../../utils/api';
 	import { getAuthUser, isFamilyRole } from '../../utils/auth';
+	import { getActiveVisionUserId, setActiveVisionUserId } from '../../utils/family-binding';
 	import { loadUserSettings } from '../../utils/user-settings';
 
 	export default defineComponent({
@@ -104,7 +119,9 @@
 		data() {
 			return {
 				settings: loadUserSettings(),
-				records: []
+				records: [],
+				bindings: [],
+				activeVisionUserId: null
 			};
 		},
 		computed: {
@@ -122,6 +139,16 @@
 			},
 			latestLocation() {
 				return this.records[0] ? this.records[0].location : '暂无';
+			},
+			bindingLabels() {
+				return this.bindings.map(item => `${item.visionNickname || item.visionUsername} · ${item.relationship || '家人'}`);
+			},
+			activeBindingIndex() {
+				return Math.max(0, this.bindings.findIndex(item => item.visionUserId === this.activeVisionUserId));
+			},
+			activeBindingLabel() {
+				const current = this.bindings.find(item => item.visionUserId === this.activeVisionUserId);
+				return current ? `${current.visionNickname || current.visionUsername} · ${current.relationship || '家人'}` : '请选择照护对象';
 			}
 		},
 		onLoad() {
@@ -129,7 +156,7 @@
 		},
 		onShow() {
 			this.settings = loadUserSettings();
-			this.refreshRecords();
+			this.loadBindings();
 		},
 		methods: {
 			ensureFamilyRole() {
@@ -144,15 +171,48 @@
 				}
 				return true;
 			},
+			loadBindings() {
+				const user = getAuthUser();
+				const storedVisionUserId = getActiveVisionUserId();
+				const data = {
+					familyUserId: user.id
+				};
+				if (storedVisionUserId) {
+					data.visionUserId = storedVisionUserId;
+				}
+				uni.request({
+					url: `${API_BASE}/api/family/profile`,
+					method: 'GET',
+					data,
+					success: (res) => {
+						if (res.statusCode !== 200) {
+							return;
+						}
+						const response = res.data || {};
+						this.bindings = Array.isArray(response.bindings) ? response.bindings : [];
+						const currentBinding = response.bindingInfo || {};
+						const firstBinding = this.bindings.length ? this.bindings[0] : null;
+						this.activeVisionUserId = currentBinding.visionUserId || (firstBinding ? firstBinding.visionUserId : null);
+						if (this.activeVisionUserId) {
+							setActiveVisionUserId(this.activeVisionUserId);
+						}
+						this.refreshRecords();
+					}
+				});
+			},
 			refreshRecords() {
 				const user = getAuthUser();
+				const data = {
+					familyUserId: user.id,
+					limit: 10
+				};
+				if (this.activeVisionUserId) {
+					data.visionUserId = this.activeVisionUserId;
+				}
 				uni.request({
 					url: `${API_BASE}/api/family/records`,
 					method: 'GET',
-					data: {
-						familyUserId: user.id,
-						limit: 10
-					},
+					data,
 					success: (res) => {
 						if (res.statusCode === 200) {
 							this.records = Array.isArray(res.data) ? res.data : [];
@@ -165,6 +225,16 @@
 						uni.showToast({ title: '记录加载失败', icon: 'none' });
 					}
 				});
+			},
+			onBindingChange(event) {
+				const index = Number(event.detail.value || 0);
+				const target = this.bindings[index];
+				if (!target) {
+					return;
+				}
+				this.activeVisionUserId = target.visionUserId;
+				setActiveVisionUserId(target.visionUserId);
+				this.refreshRecords();
 			},
 			goProfile() {
 				uni.redirectTo({
@@ -180,15 +250,23 @@
 
 	.record-card,
 	.record-meta,
-	.risk-panel {
+	.risk-panel,
+	.binding-picker {
 		border-radius: 24rpx;
 	}
 
+	.binding-picker,
 	.record-card {
 		padding: 24rpx;
 		background: linear-gradient(180deg, rgba(255, 255, 255, 0.8), rgba(245, 249, 255, 0.72));
 		border: 1px solid rgba(255, 255, 255, 0.84);
 		box-shadow: 0 16rpx 40rpx rgba(79, 118, 172, 0.08);
+	}
+
+	.picker-value {
+		font-size: 32rpx;
+		font-weight: bold;
+		color: var(--text-main);
 	}
 
 	.record-card + .record-card {

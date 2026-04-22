@@ -7,11 +7,12 @@
 		<view class="hero-shell">
 			<view class="hero-copy">
 				<text class="eyebrow">Care Profile</text>
-				<text class="hero-title">把关键照护信息集中登记到后端</text>
-				<text class="hero-desc">首版包含视障人士基本信息、紧急联系人和药品/疾病注意事项三类表单，保存后会直接写入后端。</text>
+				<text class="hero-title">家人可同时维护多位视障人士的照护档案</text>
+				<text class="hero-desc">先添加视障人士账号，再切换当前对象分别填写基本信息、紧急联系人和药品/疾病注意事项。</text>
 
 				<view class="hero-actions">
-					<button class="action-btn primary" @click="saveAll">保存登记</button>
+					<button class="action-btn primary" @click="saveAll">保存当前档案</button>
+					<button class="action-btn ghost" @click="bindVisionUser">添加视障人士</button>
 					<button class="action-btn ghost" @click="goRecords">查看记录</button>
 				</view>
 			</view>
@@ -30,8 +31,46 @@
 					<text class="stat-value stat-value-small">{{ medicineShortText }}</text>
 				</view>
 				<view class="stat-card">
-					<text class="stat-label">照护对象</text>
-					<text class="stat-value stat-value-small">{{ profile.basicInfo.name || '待填写' }}</text>
+					<text class="stat-label">当前对象</text>
+					<text class="stat-value stat-value-small">{{ activeBindingLabel }}</text>
+				</view>
+			</view>
+		</view>
+
+		<view class="section-panel">
+			<view class="section-head">
+				<view>
+					<text class="section-kicker">绑定</text>
+					<text class="section-title">添加与切换视障人士</text>
+				</view>
+				<text class="section-tag">{{ bindings.length ? `已绑定 ${bindings.length} 位` : '未绑定' }}</text>
+			</view>
+
+			<view class="form-grid">
+				<input class="input-field" v-model.trim="bindingForm.visionUsername" placeholder="视障人士账号用户名" />
+				<input class="input-field" v-model.trim="bindingForm.relationship" placeholder="关系，例如家人/子女/配偶" />
+			</view>
+
+			<view class="action-row">
+				<button class="mini-btn primary-mini" @click="bindVisionUser">确认添加</button>
+			</view>
+
+			<view class="binding-switcher" v-if="bindings.length">
+				<text class="switcher-label">当前正在编辑</text>
+				<picker class="binding-picker" :range="bindingLabels" :value="activeBindingIndex" @change="onBindingChange">
+					<view class="picker-value">{{ activeBindingLabel }}</view>
+				</picker>
+			</view>
+
+			<view class="binding-list" v-if="bindings.length">
+				<view
+					v-for="binding in bindings"
+					:key="binding.visionUserId"
+					:class="['binding-card', binding.visionUserId === profile.bindingInfo.visionUserId ? 'binding-card-active' : '']"
+					@click="switchBinding(binding.visionUserId)"
+				>
+					<text class="binding-name">{{ binding.visionNickname || binding.visionUsername }}</text>
+					<text class="binding-meta">{{ binding.visionUsername }} · {{ binding.relationship || '家人' }}</text>
 				</view>
 			</view>
 		</view>
@@ -42,6 +81,7 @@
 					<text class="section-kicker">表单一</text>
 					<text class="section-title">视障人士基本信息</text>
 				</view>
+				<text class="section-tag">{{ activeBindingLabel }}</text>
 			</view>
 
 			<view class="form-grid">
@@ -86,7 +126,7 @@
 
 		<view class="section-panel shortcut-panel">
 			<view class="action-row">
-				<button class="action-btn primary" @click="saveAll">保存登记</button>
+				<button class="action-btn primary" @click="saveAll">保存当前档案</button>
 				<button class="action-btn ghost" @click="goCenter">返回家属中心</button>
 			</view>
 		</view>
@@ -100,10 +140,18 @@
 	import AppTabBar from '../../components/app-tab-bar.vue';
 	import { API_BASE } from '../../utils/api';
 	import { getAuthUser, isFamilyRole } from '../../utils/auth';
+	import { getActiveVisionUserId, setActiveVisionUserId } from '../../utils/family-binding';
 	import { loadUserSettings } from '../../utils/user-settings';
 
 	function emptyProfile() {
 		return {
+			bindings: [],
+			bindingInfo: {
+				visionUserId: null,
+				visionUsername: '',
+				visionNickname: '',
+				relationship: ''
+			},
 			basicInfo: {
 				name: '',
 				gender: '',
@@ -127,6 +175,14 @@
 		};
 	}
 
+	function normalizeProfile(data) {
+		return {
+			...emptyProfile(),
+			...(data || {}),
+			bindings: data && Array.isArray(data.bindings) ? data.bindings : []
+		};
+	}
+
 	export default defineComponent({
 		components: {
 			AppTabBar
@@ -134,7 +190,11 @@
 		data() {
 			return {
 				settings: loadUserSettings(),
-				profile: emptyProfile()
+				profile: emptyProfile(),
+				bindingForm: {
+					visionUsername: '',
+					relationship: '家人'
+				}
 			};
 		},
 		computed: {
@@ -143,6 +203,18 @@
 			},
 			largeFontClass() {
 				return this.settings.extraLargeText ? 'font-large' : '';
+			},
+			bindings() {
+				return Array.isArray(this.profile.bindings) ? this.profile.bindings : [];
+			},
+			bindingLabels() {
+				return this.bindings.map(item => `${item.visionNickname || item.visionUsername} · ${item.relationship || '家人'}`);
+			},
+			activeBindingIndex() {
+				return Math.max(0, this.bindings.findIndex(item => item.visionUserId === this.profile.bindingInfo.visionUserId));
+			},
+			activeBindingLabel() {
+				return this.profile.bindingInfo.visionNickname || this.profile.bindingInfo.visionUsername || '待选择';
 			},
 			completionText() {
 				let count = 0;
@@ -161,7 +233,7 @@
 		},
 		onShow() {
 			this.settings = loadUserSettings();
-			this.loadProfile();
+			this.loadProfile(getActiveVisionUserId());
 		},
 		methods: {
 			ensureFamilyRole() {
@@ -176,17 +248,29 @@
 				}
 				return true;
 			},
-			loadProfile() {
+			applyProfile(responseData) {
+				this.profile = normalizeProfile(responseData);
+				if (this.profile.bindingInfo.visionUserId) {
+					setActiveVisionUserId(this.profile.bindingInfo.visionUserId);
+				}
+			},
+			loadProfile(visionUserId = null) {
 				const user = getAuthUser();
+				const data = {
+					familyUserId: user.id
+				};
+				if (visionUserId) {
+					data.visionUserId = visionUserId;
+				}
 				uni.request({
 					url: `${API_BASE}/api/family/profile`,
 					method: 'GET',
-					data: {
-						familyUserId: user.id
-					},
+					data,
 					success: (res) => {
 						if (res.statusCode === 200) {
-							this.profile = res.data || emptyProfile();
+							this.applyProfile(res.data);
+							this.bindingForm.relationship = '家人';
+							this.bindingForm.visionUsername = '';
 							return;
 						}
 						const data = res.data || {};
@@ -197,10 +281,58 @@
 					}
 				});
 			},
+			bindVisionUser() {
+				const user = getAuthUser();
+				if (!this.bindingForm.visionUsername) {
+					uni.showToast({ title: '请先输入视障人士账号', icon: 'none' });
+					return;
+				}
+				uni.request({
+					url: `${API_BASE}/api/family/bind-vision?familyUserId=${user.id}`,
+					method: 'POST',
+					header: {
+						'Content-Type': 'application/json'
+					},
+					data: this.bindingForm,
+					success: (res) => {
+						if (res.statusCode === 200) {
+							this.applyProfile(res.data);
+							this.bindingForm.visionUsername = '';
+							this.bindingForm.relationship = '家人';
+							uni.showToast({ title: '添加成功', icon: 'success' });
+							return;
+						}
+						const data = res.data || {};
+						uni.showToast({ title: data.message || '添加失败', icon: 'none' });
+					},
+					fail: () => {
+						uni.showToast({ title: '添加失败', icon: 'none' });
+					}
+				});
+			},
+			onBindingChange(event) {
+				const index = Number(event.detail.value || 0);
+				const target = this.bindings[index];
+				if (!target) {
+					return;
+				}
+				this.switchBinding(target.visionUserId);
+			},
+			switchBinding(visionUserId) {
+				if (!visionUserId || visionUserId === this.profile.bindingInfo.visionUserId) {
+					return;
+				}
+				this.loadProfile(visionUserId);
+			},
 			saveAll() {
 				const user = getAuthUser();
+				const visionUserId = this.profile.bindingInfo.visionUserId;
+				if (!visionUserId) {
+					uni.showToast({ title: '请先添加视障人士', icon: 'none' });
+					return;
+				}
 				uni.request({
-					url: `${API_BASE}/api/family/profile?familyUserId=${user.id}`,
+					url: `${API_BASE}/api/family/profile?familyUserId=${user.id}&visionUserId=${visionUserId}`,
 					method: 'POST',
 					header: {
 						'Content-Type': 'application/json'
@@ -208,7 +340,7 @@
 					data: this.profile,
 					success: (res) => {
 						if (res.statusCode === 200) {
-							this.profile = res.data || this.profile;
+							this.applyProfile(res.data);
 							uni.showToast({ title: '登记信息已保存', icon: 'success' });
 							return;
 						}
@@ -244,7 +376,9 @@
 	}
 
 	.input-field,
-	.textarea-field {
+	.textarea-field,
+	.binding-picker,
+	.binding-card {
 		width: 100%;
 		box-sizing: border-box;
 		margin-top: 16rpx;
@@ -270,8 +404,46 @@
 		line-height: 1.65;
 	}
 
+	.binding-switcher {
+		margin-top: 12rpx;
+	}
+
+	.switcher-label,
+	.binding-meta {
+		display: block;
+		font-size: 24rpx;
+		line-height: 1.6;
+		color: var(--text-soft);
+	}
+
+	.picker-value,
+	.binding-name {
+		font-size: 28rpx;
+		font-weight: bold;
+		color: var(--text-main);
+	}
+
+	.binding-list {
+		margin-top: 12rpx;
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		gap: 14rpx;
+	}
+
+	.binding-card {
+		margin-top: 0;
+		background: linear-gradient(180deg, rgba(255, 255, 255, 0.82), rgba(245, 249, 255, 0.72));
+		box-shadow: 0 16rpx 40rpx rgba(79, 118, 172, 0.08);
+	}
+
+	.binding-card-active {
+		border-color: rgba(58, 109, 185, 0.38);
+		box-shadow: 0 20rpx 44rpx rgba(58, 109, 185, 0.14);
+	}
+
 	@media screen and (max-width: 720px) {
-		.form-grid {
+		.form-grid,
+		.binding-list {
 			grid-template-columns: 1fr;
 		}
 	}
