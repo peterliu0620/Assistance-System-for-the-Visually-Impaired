@@ -55,6 +55,10 @@ Thumbs.db
 .env.local
 .env.*.local
 
+# Local backend config (含本地 root 密码，禁止提交)
+application-local.properties
+.workbuddy/
+
 # Local backend config
 # user/backend/src/main/resources/application.properties
 
