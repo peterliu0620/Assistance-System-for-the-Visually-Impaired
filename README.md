@@ -285,14 +285,13 @@ JWT 过期（默认 24 小时）或请求未带 `Authorization` 头，重新登�
 
 ## 安全须知
 
-仓库历史中曾提交过明文的 DashScope API Key 与数据库密码，**仅从代码里删除并不等于安全**，键值仍留在提交历史中。建议按顺序处理：
+数据库密码、模型 API Key、JWT 密钥都属于敏感信息，建议不要写死在 `application.properties` 里，而是通过环境变量或本地配置文件注入：
 
-1. 登录阿里云百炼控制台，禁用并删除已泄露的 Key，重新生成一个
-2. 修改数据库账号密码，同步更新本地配置
-3. 把配置改为环境变量或 `application-local.properties`，并确认 `.gitignore` 已覆盖
-4. 管理端 `app.jwt.secret` 换成不少于 32 位的随机串，`app.admin.default-password` 不要保留默认值
-
-`.gitignore` 已排除 `target/`、`node_modules/`、`unpackage/`、`dist/` 等构建产物，提交前用 `git status` 确认没有把本地配置带进去。
+1. 数据库密码用 `${DB_PASSWORD}`、模型 Key 用 `${DASHSCOPE_API_KEY}`，启动前通过环境变量提供；或写入 `application-local.properties` 并在主配置中引入
+2. 确认 `.gitignore` 覆盖本地配置文件，以及 `target/`、`node_modules/`、`unpackage/`、`dist/` 等构建产物
+3. 提交前用 `git status` 和 `git diff` 复查，避免把本机配置带进提交
+4. 管理端 `app.jwt.secret` 使用不少于 32 位的随机串，`app.admin.default-password` 不要保留默认值
+5. 定期轮换模型 API Key 与数据库密码，多人协作或仓库公开时尤其必要
 
 ---
 
